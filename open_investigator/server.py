@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 import asyncio
 import httpx
 from mcp.server import Server
@@ -10,6 +11,21 @@ from mcp.types import Tool, TextContent
 
 from .client import ICIJClient, INVESTIGATIONS, ENTITY_TYPES
 from .opensanctions_client import OpenSanctionsClient
+
+
+def _load_env():
+    """Load API keys from .env file in the project root."""
+    env_path = Path(__file__).parent.parent / ".env"
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    os.environ.setdefault(key.strip(), value.strip())
+
+
+_load_env()
 
 server = Server("open-investigator")
 icij_client = ICIJClient()

@@ -44,17 +44,21 @@ Add to your `~/.claude/settings.json` or project `.claude/settings.json`:
 {
   "mcpServers": {
     "investigator": {
-      "command": "/path/to/open-investigator/.venv/bin/open-investigator",
-      "env": {
-        "OPENSANCTIONS_API_KEY": "your_key_here"
-      }
+      "command": "/path/to/open-investigator/.venv/bin/open-investigator"
     }
   }
 }
 ```
 
+The server loads API keys from a `.env` file in the project root:
+
+```bash
+# open-investigator/.env
+OPENSANCTIONS_API_KEY=your_key_here
+```
+
 > [!IMPORTANT]
-> The ICIJ tools work without any API key. The OpenSanctions tools require a free API key — get one at [opensanctions.org/api](https://www.opensanctions.org/api/). Free for non-commercial and open data projects.
+> The ICIJ tools work without any API key. The OpenSanctions tools require a free API key — get one at [opensanctions.org/api](https://www.opensanctions.org/api/). Free for non-commercial and open data projects. The `.env` file is gitignored — your key stays local.
 
 ## Tools
 
