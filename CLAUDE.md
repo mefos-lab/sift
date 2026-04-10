@@ -6,7 +6,7 @@ search, entity lookup, network traversal, and pattern detection across
 
 ## Structure
 
-- `icij_mcp/` — MCP server and API client
+- `open_investigator/` — MCP server and API client
 - `.claude/skills/` — Investigative skills (slash commands)
 - `patterns/` — Documented offshore structure patterns (accumulated over investigations)
 - `investigations/` — Saved investigation reports (optional — for persistent research)

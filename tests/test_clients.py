@@ -6,8 +6,8 @@ Uses httpx mock transport to avoid hitting real APIs in tests.
 import json
 import pytest
 import httpx
-from icij_mcp.client import ICIJClient, INVESTIGATIONS, ENTITY_TYPES
-from icij_mcp.opensanctions_client import OpenSanctionsClient
+from open_investigator.client import ICIJClient, INVESTIGATIONS, ENTITY_TYPES
+from open_investigator.opensanctions_client import OpenSanctionsClient
 
 
 # =============================================================================

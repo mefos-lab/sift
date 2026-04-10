@@ -11,7 +11,7 @@ from mcp.types import Tool, TextContent
 from .client import ICIJClient, INVESTIGATIONS, ENTITY_TYPES
 from .opensanctions_client import OpenSanctionsClient
 
-server = Server("offshore-investigator")
+server = Server("open-investigator")
 icij_client = ICIJClient()
 os_client = OpenSanctionsClient(api_key=os.environ.get("OPENSANCTIONS_API_KEY"))
 
