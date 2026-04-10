@@ -66,3 +66,19 @@ INDICATORS: Multiple entities created within 30 days with shared officers or int
 RISK LEVEL: MEDIUM (may indicate legitimate business expansion; HIGH when correlated with sanctions or legal exposure)
 STATUS: CONFIRMED
 OBSERVED IN: Panama Papers, Pandora Papers
+
+## [The Sanctions Evasion Structure](sanctions-evasion-structure.md)
+STRUCTURE: Offshore arrangement maintaining financial system access while routing around sanctioned persons through intermediary layers — nominees, shells, or professional intermediaries obscure the sanctioned person's connection.
+JURISDICTIONS: High-secrecy entity jurisdictions; banking in jurisdictions with weaker sanctions enforcement
+INDICATORS: ICIJ entity whose officers/connected persons match sanctioned entries in OpenSanctions, with nominee layers interposed. Entities created after sanctions designation date are higher risk.
+RISK LEVEL: HIGH
+STATUS: PROPOSED
+OBSERVED IN: To be confirmed through cross-referencing
+
+## [The PEP Opacity Layer](pep-opacity-layer.md)
+STRUCTURE: Offshore entities controlled by politically exposed persons through nominees designed to avoid triggering enhanced due diligence. The PEP's name does not appear in corporate records; family members, associates, or professional nominees hold formal positions.
+JURISDICTIONS: Entities in high-secrecy jurisdictions; PEP based in jurisdiction with anti-corruption scrutiny
+INDICATORS: ICIJ entity officers matching PEP family/associates in OpenSanctions (topic: role.pep), with nominee directors interposed. PEP's own name absent from ICIJ records.
+RISK LEVEL: HIGH
+STATUS: PROPOSED
+OBSERVED IN: To be confirmed through cross-referencing

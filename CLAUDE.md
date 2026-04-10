@@ -13,12 +13,18 @@ search, entity lookup, network traversal, and pattern detection across
 
 ## Skills
 
-- `/investigate <name>` — Search and summarise everything on a name
-- `/trace-network <name>` — Walk the graph outward from a name
-- `/find-patterns <name(s)>` — Analyse structural patterns in offshore arrangements
-- `/compare <name1>, <name2>` — Find shared connections between names
-- `/exposure-report <names>` — Batch due-diligence screening
-- `/jurisdiction-check <name>` — Map jurisdictional footprint
+All skills search both ICIJ and OpenSanctions, cross-referencing
+offshore structures with sanctions exposure.
+
+- `/investigate <name>` — Unified intelligence summary (offshore + sanctions)
+- `/trace-network <name>` — Walk the graph outward, flag sanctioned nodes
+- `/find-patterns <name(s)>` — Structural pattern analysis with sanctions overlay
+- `/compare <name1>, <name2>` — Find shared connections and sanctions links
+- `/exposure-report <names>` — Batch dual-source due-diligence screening
+- `/jurisdiction-check <name>` — Jurisdictional footprint with sanctions cross-ref
+- `/monitor <name>` — Check for new sanctions listings since a date
+- `/compliance-screen <name>` — Rigorous structured sanctions/PEP screening
+- `/cross-reference <name>` — The master skill: full investigation across all sources
 
 ## Pattern Library
 

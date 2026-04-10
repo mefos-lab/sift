@@ -1,79 +1,81 @@
 # Exposure Report
 
-Batch-screen a list of names against the ICIJ Offshore Leaks Database
-and produce a due-diligence summary showing who appears and who doesn't.
+Batch-screen a list of names against BOTH the ICIJ Offshore Leaks Database
+and OpenSanctions, producing a unified due-diligence summary.
+
+**Before running this skill**, load `patterns/INDEX.md` from the project root.
 
 ## Usage
 
-`/exposure-report <name1>, <name2>, <name3>, ...` — screen a list of names
+`/exposure-report <name1>, <name2>, <name3>, ...` — screen a list
 `/exposure-report --file <path>` — screen names from a file (one per line)
 
 ## Procedure
 
-1. Parse names from the input (comma-separated) or file (newline-separated).
-   Trim whitespace.
+1. Parse names from input (comma-separated) or file (newline-separated).
 
-2. Process in batches of 25 using `icij_batch_search`.
+2. **Dual-source screening** — run in parallel:
+   a. `icij_batch_search` with all names (batches of 25)
+   b. `sanctions_batch_match` with all names (batches of 25)
 
-3. For each name, classify the result:
-   - **HIT** (score >= 70): Strong match — likely the same person/entity
-   - **POSSIBLE** (score 40-69): Worth examining — may be same or different
-   - **CLEAR** (score < 40 or no results): No strong match found
+3. For each name, classify:
+   - **CRITICAL**: Appears in BOTH databases (offshore + sanctioned)
+   - **SANCTIONS HIT** (score >= 0.7): Strong match in OpenSanctions
+   - **OFFSHORE HIT** (score >= 70): Strong match in ICIJ
+   - **POSSIBLE**: Moderate matches in either database
+   - **CLEAR**: No strong matches in either database
 
-4. For each HIT, use `icij_entity` to get jurisdiction and type details.
+4. For each CRITICAL or SANCTIONS HIT, use `sanctions_entity` to get
+   full details (which lists, topics, datasets).
 
-5. Produce an exposure report:
+5. For each CRITICAL or OFFSHORE HIT, use `icij_entity` to get
+   jurisdiction and type details.
+
+6. Produce an exposure report:
 
 ```
-## ICIJ Exposure Report
+## Exposure Report
 
 Date: [YYYY-MM-DD]
 Names screened: [N]
-Database: ICIJ Offshore Leaks (Panama Papers, Paradise Papers,
-  Pandora Papers, Bahamas Leaks, Offshore Leaks)
+Databases: ICIJ Offshore Leaks + OpenSanctions (320+ lists)
 
 ### Summary
 
 | Status | Count |
 |--------|-------|
-| HIT | [N] |
+| CRITICAL (both databases) | [N] |
+| SANCTIONS HIT | [N] |
+| OFFSHORE HIT | [N] |
 | POSSIBLE | [N] |
 | CLEAR | [N] |
 
-### Hits (score >= 70)
+### ⚠️ Critical (offshore + sanctioned)
 
-| Name searched | Match | Type | Score | Jurisdiction | Investigation |
-|--------------|-------|------|-------|-------------|---------------|
-| ... | ... | ... | ... | ... | ... |
+| Name | ICIJ match | Jurisdiction | Sanctions lists | Score |
+|------|-----------|-------------|-----------------|-------|
 
-### Possible matches (score 40-69)
+### Sanctions hits
 
-| Name searched | Match | Type | Score | Jurisdiction | Investigation |
-|--------------|-------|------|-------|-------------|---------------|
-| ... | ... | ... | ... | ... | ... |
+| Name | Match | Score | Lists | Topics |
+|------|-------|-------|-------|--------|
 
-### Clear (no strong match)
+### Offshore hits
 
-[List of names with no results or only low-score matches]
+| Name | Match | Score | Type | Jurisdiction | Investigation |
+|------|-------|-------|------|-------------|---------------|
+
+### Clear
+
+[List of names with no strong matches in either database]
 
 ### Caveats
 
-- This report screens against 5 specific data leaks. Many offshore
-  jurisdictions and service providers are not represented.
-- A CLEAR result means the name was not found in these specific
-  leaks, not that the person has no offshore holdings.
-- HIT means a name match, not confirmed identity. Common names may
-  produce false positives. Verify against additional sources.
-- The ICIJ database does not constitute a sanctions list. Appearing
-  in it does not indicate illegality.
+[Standard caveats about database coverage, false positives, etc.]
 ```
 
 ## Notes
 
-- For lists longer than 25, the skill batches automatically.
-- Processing time scales linearly with list size — expect ~2 seconds
-  per batch of 25.
-- For high-stakes due diligence, supplement with OpenSanctions,
-  corporate registries, and beneficial ownership databases.
-- Consider searching name variants (maiden names, transliterations,
-  company names with and without jurisdiction suffixes).
+- CRITICAL status (both databases) warrants immediate investigation
+- Processing scales linearly — ~2 seconds per batch of 25
+- For CRITICAL findings, consider running `/investigate` on each

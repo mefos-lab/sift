@@ -1,8 +1,9 @@
 # Find Patterns
 
-Analyse a set of ICIJ search results to identify structural patterns
-in offshore arrangements — shared jurisdictions, common intermediaries,
-repeated structures, temporal clustering, and network topology.
+Analyse a set of search results from both ICIJ and OpenSanctions to
+identify structural patterns in offshore arrangements — shared
+jurisdictions, common intermediaries, repeated structures, temporal
+clustering, network topology, and sanctions exposure.
 
 **Before running this skill**, load `patterns/INDEX.md` from the project
 root. Cross-reference all findings against the known pattern library.
@@ -18,117 +19,94 @@ adding it with a PROPOSED status.
 
 ## Procedure
 
-### For a single name or list of names:
+### Step 1: Data gathering
 
 1. Use `icij_search` (or `icij_batch_search` for multiple names) to
-   find all matches.
+   find all matches. For each match with score > 40, use `icij_entity`
+   and `icij_extend` with `["country_codes", "name", "note", "sourceID"]`.
 
-2. For each match with score > 40, use `icij_entity` to get details
-   including jurisdiction and type.
+2. Use `sanctions_search` (or `sanctions_batch_match` for multiple names)
+   to find sanctions/PEP matches for the same names.
 
-3. Use `icij_extend` on all matched IDs with properties:
-   `["country_codes", "name", "note", "sourceID"]`
+### Step 2: Structural analysis
 
-4. Analyse the results for the following pattern types:
+Analyse the ICIJ results for:
 
-**Jurisdictional patterns:**
-- Which jurisdictions appear most frequently?
-- Is there a multi-jurisdiction layering structure (e.g., entity in BVI,
-  intermediary in Panama, address in Geneva)?
-- Do the jurisdictions correlate with known secrecy or tax haven rankings?
+**Jurisdictional patterns**: Which jurisdictions appear most? Is there
+multi-jurisdiction layering? Do jurisdictions correlate with secrecy
+rankings?
 
-**Intermediary patterns:**
-- Do multiple entities share the same intermediary (law firm, registered agent)?
-- Is the intermediary a known enabler (Mossack Fonseca, Asiaciti Trust, etc.)?
-- Does the same intermediary appear across different investigations?
+**Intermediary patterns**: Do multiple entities share the same
+intermediary? Is it a known enabler? Same intermediary across
+investigations?
 
-**Officer patterns:**
-- Do the same officers (directors, shareholders, beneficial owners) appear
-  across multiple entities?
-- Are nominee directors used (the same name appearing as officer for
-  dozens of entities)?
-- Are there family connections (shared surnames)?
+**Officer patterns**: Same officers across multiple entities? Nominee
+directors (one name on dozens of entities)? Family connections?
 
-**Temporal patterns:**
-- Were entities created in clusters (same month/year)?
-- Do creation dates correlate with known events (sanctions announcements,
-  elections, regulatory changes)?
-- Is there a pattern of entities being created shortly before or after
-  significant political or economic events?
+**Temporal patterns**: Entities created in clusters? Correlating with
+sanctions announcements, elections, regulatory changes?
 
-**Structural patterns:**
-- Shell company chains (entity owns entity owns entity)
-- Circular ownership (A owns B owns C owns A)
-- Star topology (one officer connected to many entities)
-- Layered opacity (each hop adds a jurisdiction and an intermediary)
+**Structural patterns**: Shell company chains (Matryoshka), hub-and-spoke
+(Starburst), parallel entities (Mirror), shared formation agent
+(Intermediary Cluster), professional nominees (Nominee Shield),
+jurisdiction gap exploitation (Regulatory Arbitrage Chain), formation
+bursts (Temporal Cluster).
 
-### For a jurisdiction analysis:
+### Step 3: Sanctions overlay
 
-1. Use `icij_suggest` with common entity name patterns for the
-   jurisdiction (e.g., "Limited" for BVI, "S.A." for Panama).
+For each entity or officer identified in Step 2, check sanctions exposure:
 
-2. Use `icij_search` filtered by the jurisdiction where possible.
+1. Use `sanctions_match` on key names found in the ICIJ network
+2. For sanctioned entities, use `sanctions_provenance` to determine
+   WHICH sanctions list and WHEN they were listed
+3. Check for the **Sanctions Evasion Structure** pattern: ICIJ entities
+   connected to sanctioned persons through intermediary layers
+4. Check for the **PEP Opacity Layer** pattern: ICIJ entities with
+   officers matching PEP entries in OpenSanctions
 
-3. Analyse the structural patterns described above across the
-   jurisdiction's entities.
-
-5. Produce a pattern report:
+### Step 4: Report
 
 ```
 ## Pattern analysis: [name(s) or jurisdiction]
 
 ### Data summary
-- Entities examined: [N]
+- ICIJ entities examined: [N]
+- OpenSanctions matches: [N]
 - Jurisdictions: [list with counts]
-- Investigations: [which leaks these appeared in]
+- Investigations: [which leaks]
 - Intermediaries: [list with counts]
 
 ### Patterns identified
 
-#### [Pattern type]: [specific finding]
+#### [Pattern name] (from patterns/INDEX.md)
 - Evidence: [which entities/connections demonstrate this]
 - Significance: [what this pattern typically indicates]
-- Confidence: [HIGH/MEDIUM/LOW based on data strength]
+- Confidence: HIGH/MEDIUM/LOW
+
+### Sanctions overlay
+
+| Entity/Officer | ICIJ role | Sanctioned | Lists | Listed since |
+|---------------|-----------|-----------|-------|-------------|
+| ... | Officer of [entity] | Yes | OFAC SDN | 2022-03-15 |
+
+[Flag Sanctions Evasion Structure or PEP Opacity Layer if identified]
 
 ### Red flags
-[List specific indicators that warrant further investigation:
-- Nominee structures
-- Jurisdictional layering
-- Temporal clustering around events
-- Shared intermediaries across unrelated entities
-- Connections to sanctioned jurisdictions or persons]
+[Specific indicators warranting further investigation]
+
+### New patterns
+[Any structural arrangement not in the current library — propose
+with PROPOSED status for addition to patterns/INDEX.md]
 
 ### Limitations
-[What the data does NOT show — beneficial ownership may be hidden
-behind nominees, the database only covers 5 specific leaks, absence
-of evidence is not evidence of absence]
+[What the data does NOT show]
 ```
-
-## Pattern vocabulary
-
-For reference, common offshore structure types:
-
-- **Shell company**: Entity with no operations, used to hold assets or
-  route payments
-- **Nominee structure**: Directors/shareholders who act on behalf of the
-  true beneficial owner
-- **Layered structure**: Multiple entities in different jurisdictions,
-  each owning the next, creating opacity through jurisdictional complexity
-- **Mirror structure**: Parallel entities in different jurisdictions with
-  the same officers, providing redundancy
-- **Starburst**: One central figure connected to many entities, suggesting
-  a portfolio of offshore vehicles
-- **Pipeline**: Linear chain of entities routing funds through
-  progressively more opaque jurisdictions
 
 ## Notes
 
-- The ICIJ database is not a sanctions list. Appearing in it does not
-  indicate illegality — many offshore structures are legal.
-- The value of pattern analysis is identifying structures that COULD
-  facilitate illicit activity, not proving that they do.
-- For investigative work, patterns identified here should be
-  cross-referenced against sanctions lists (OpenSanctions), corporate
-  registries, and beneficial ownership databases.
-- The database covers 5 specific leaks. There are many offshore
-  providers and jurisdictions not represented.
+- The sanctions overlay is what distinguishes this from a pure ICIJ
+  analysis — it connects offshore structures to enforcement reality
+- A structure that matches a known pattern AND has sanctioned nodes
+  is the highest-risk finding
+- Propose new patterns when a structure is identified that doesn't
+  match any existing pattern in the library
