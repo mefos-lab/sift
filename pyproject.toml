@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "icij-mcp"
-version = "0.1.0"
-description = "MCP server for the ICIJ Offshore Leaks Database"
+name = "offshore-investigator"
+version = "0.2.0"
+description = "MCP server for financial investigations — ICIJ Offshore Leaks + OpenSanctions"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -14,5 +14,8 @@ dependencies = [
     "httpx>=0.27.0",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["icij_mcp"]
+
 [project.scripts]
-icij-mcp = "icij_mcp.server:main"
+offshore-investigator = "icij_mcp.server:main"
