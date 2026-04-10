@@ -35,6 +35,7 @@ class OpenSanctionsClient:
         limit: int = 10,
         offset: int = 0,
         fuzzy: bool = True,
+        changed_since: str | None = None,
     ) -> dict[str, Any]:
         """Full-text search with faceted filtering."""
         params: dict[str, Any] = {
@@ -51,6 +52,8 @@ class OpenSanctionsClient:
             params["topics"] = topics
         if datasets:
             params["datasets"] = datasets
+        if changed_since:
+            params["changed_since"] = changed_since
 
         resp = await self._client.get(f"/search/{dataset}", params=params)
         resp.raise_for_status()
@@ -66,6 +69,7 @@ class OpenSanctionsClient:
         limit: int = 5,
         algorithm: str | None = None,
         topics: list[str] | None = None,
+        changed_since: str | None = None,
     ) -> dict[str, Any]:
         """Structured entity matching against sanctions/PEP lists.
 
@@ -83,6 +87,8 @@ class OpenSanctionsClient:
             params["algorithm"] = algorithm
         if topics:
             params["topics"] = topics
+        if changed_since:
+            params["changed_since"] = changed_since
 
         payload = {"queries": queries}
         resp = await self._client.post(

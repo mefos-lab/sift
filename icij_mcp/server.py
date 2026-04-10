@@ -200,6 +200,25 @@ async def list_tools() -> list[Tool]:
                         "default": 10,
                         "description": "Max results (default 10, max 500)",
                     },
+                    "offset": {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Pagination offset (default 0)",
+                    },
+                    "changed_since": {
+                        "type": "string",
+                        "description": "Only return entities changed after this ISO date (e.g. 2025-01-01) (optional)",
+                    },
+                    "datasets": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Filter to specific datasets (optional)",
+                    },
+                    "fuzzy": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Toggle fuzzy matching (default true)",
+                    },
                 },
                 "required": ["query"],
             },
@@ -254,6 +273,14 @@ async def list_tools() -> list[Tool]:
                         "type": "array",
                         "items": {"type": "string", "enum": OPENSANCTIONS_TOPICS},
                         "description": "Topic filters (optional)",
+                    },
+                    "algorithm": {
+                        "type": "string",
+                        "description": "Scoring algorithm to use (optional — see sanctions_algorithms tool)",
+                    },
+                    "changed_since": {
+                        "type": "string",
+                        "description": "Only return entities changed after this ISO date (optional)",
                     },
                 },
                 "required": ["name"],
@@ -338,6 +365,109 @@ async def list_tools() -> list[Tool]:
                 "properties": {},
             },
         ),
+        Tool(
+            name="sanctions_batch_match",
+            description=(
+                "Screen multiple names against OpenSanctions in a single request. "
+                "Efficient for bulk compliance screening of name lists."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of names to screen",
+                    },
+                    "schema": {
+                        "type": "string",
+                        "enum": ["Person", "Company", "Organization", "LegalEntity"],
+                        "default": "Person",
+                        "description": "Entity type for all queries (default: Person)",
+                    },
+                    "threshold": {
+                        "type": "number",
+                        "default": 0.7,
+                        "description": "Minimum match score (0.0-1.0, default 0.7)",
+                    },
+                    "algorithm": {
+                        "type": "string",
+                        "description": "Scoring algorithm to use (optional)",
+                    },
+                    "topics": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": OPENSANCTIONS_TOPICS},
+                        "description": "Topic filters (optional)",
+                    },
+                },
+                "required": ["names"],
+            },
+        ),
+        Tool(
+            name="sanctions_algorithms",
+            description=(
+                "List available scoring algorithms for OpenSanctions matching. "
+                "Use the algorithm name with sanctions_match or sanctions_batch_match."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+        Tool(
+            name="sanctions_monitor",
+            description=(
+                "Check for new additions to sanctions lists since a given date. "
+                "Useful for ongoing monitoring of a name against list updates."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Name to monitor",
+                    },
+                    "since": {
+                        "type": "string",
+                        "description": "ISO date to check from (e.g. 2025-06-01)",
+                    },
+                    "topics": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": OPENSANCTIONS_TOPICS},
+                        "description": "Topic filters (optional)",
+                    },
+                },
+                "required": ["query", "since"],
+            },
+        ),
+        Tool(
+            name="icij_suggest_property",
+            description="Autocomplete property names in the ICIJ database.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "prefix": {
+                        "type": "string",
+                        "description": "Beginning of the property name to autocomplete",
+                    },
+                },
+                "required": ["prefix"],
+            },
+        ),
+        Tool(
+            name="icij_suggest_type",
+            description="Autocomplete entity type names in the ICIJ database.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "prefix": {
+                        "type": "string",
+                        "description": "Beginning of the type name to autocomplete",
+                    },
+                },
+                "required": ["prefix"],
+            },
+        ),
     ]
 
 
@@ -419,6 +549,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 countries=arguments.get("countries"),
                 topics=arguments.get("topics"),
                 limit=arguments.get("limit", 10),
+                offset=arguments.get("offset", 0),
+                changed_since=arguments.get("changed_since"),
+                datasets=arguments.get("datasets"),
+                fuzzy=arguments.get("fuzzy", True),
             )
 
         elif name == "sanctions_match":
@@ -442,6 +576,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 queries=queries,
                 threshold=arguments.get("threshold", 0.7),
                 topics=arguments.get("topics"),
+                algorithm=arguments.get("algorithm"),
+                changed_since=arguments.get("changed_since"),
             )
 
         elif name == "sanctions_entity":
@@ -462,6 +598,37 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "sanctions_catalog":
             result = await os_client.get_catalog()
+
+        elif name == "sanctions_batch_match":
+            schema = arguments.get("schema", "Person")
+            queries = {}
+            for i, n in enumerate(arguments["names"]):
+                queries[f"q{i}"] = {
+                    "schema": schema,
+                    "properties": {"name": [n]},
+                }
+            result = await os_client.match(
+                queries=queries,
+                threshold=arguments.get("threshold", 0.7),
+                topics=arguments.get("topics"),
+                algorithm=arguments.get("algorithm"),
+            )
+
+        elif name == "sanctions_algorithms":
+            result = await os_client.get_algorithms()
+
+        elif name == "sanctions_monitor":
+            result = await os_client.search(
+                query=arguments["query"],
+                changed_since=arguments["since"],
+                topics=arguments.get("topics"),
+            )
+
+        elif name == "icij_suggest_property":
+            result = await icij_client.suggest_property(arguments["prefix"])
+
+        elif name == "icij_suggest_type":
+            result = await icij_client.suggest_type(arguments["prefix"])
 
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
