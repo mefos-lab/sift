@@ -286,7 +286,10 @@
 <body>
 
 <div class="header">
-  <h1 id="title">Investigation</h1>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="font-size:13px;font-weight:700;color:var(--icij-color);letter-spacing:1px;text-transform:uppercase;opacity:0.7">Sift</div>
+    <h1 id="title">Investigation</h1>
+  </div>
   <div class="header-controls">
     <input type="text" class="search-input" id="searchInput" placeholder="Filter nodes...">
     <label><input type="checkbox" id="toggleIcij" checked> ICIJ</label>
@@ -299,10 +302,16 @@
   </div>
 </div>
 
-<!-- Executive Summary -->
-<div class="exec-summary">
-  <div class="summary-grid" id="summaryGrid"></div>
-  <div class="findings-narrative" id="narrative"></div>
+<!-- Executive Summary (collapsible) -->
+<div class="exec-summary" id="execSummary">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);font-weight:600">Executive Summary</div>
+    <button id="toggleSummary" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px">Collapse</button>
+  </div>
+  <div id="summaryContent">
+    <div class="summary-grid" id="summaryGrid"></div>
+    <div class="findings-narrative" id="narrative"></div>
+  </div>
 </div>
 
 <!-- Tab navigation -->
@@ -479,6 +488,16 @@
 
 <div class="tooltip" id="tooltip"></div>
 
+<div style="padding:16px 24px;border-top:1px solid var(--border);background:var(--surface);display:flex;justify-content:space-between;align-items:center">
+  <div style="font-size:11px;color:var(--text-dim)">
+    <span style="font-weight:700;color:var(--icij-color);letter-spacing:1px;text-transform:uppercase">Sift</span>
+    <span style="margin-left:8px">Public records intelligence for investigative journalism</span>
+  </div>
+  <div style="font-size:10px;color:var(--text-dim)">
+    Sources: ICIJ Offshore Leaks, OpenSanctions, GLEIF, SEC EDGAR, UK Companies House, CourtListener
+  </div>
+</div>
+
 <script>
 // ============================================================
 // DATA
@@ -493,6 +512,16 @@ if (typeof d3 === 'undefined') {
   document.getElementById('graphPanel').innerHTML =
     '<p style="padding:40px;color:#f85149;font-size:14px">Failed to load D3.js from CDN. Check your network connection or ad blocker.</p>';
 }
+
+// ============================================================
+// COLLAPSE SUMMARY
+// ============================================================
+document.getElementById('toggleSummary').addEventListener('click', function() {
+  const content = document.getElementById('summaryContent');
+  const isHidden = content.style.display === 'none';
+  content.style.display = isHidden ? '' : 'none';
+  this.textContent = isHidden ? 'Collapse' : 'Expand';
+});
 
 // ============================================================
 // TAB SWITCHING
@@ -864,6 +893,11 @@ node.on('mouseover', (event, d) => {
     if (d.sanctioned) html += `<br><span style="color:var(--sanction-color);font-weight:600">Sanctioned</span>`;
     if (d.pep) html += `<br><span style="color:var(--pep-color);font-weight:600">Politically Exposed Person</span>`;
     if ((d.topics||[]).includes('role.rca')) html += `<br><span style="color:var(--rca-color)">Close associate of PEP</span>`;
+    if (d.risk_score > 0) {
+      const rc = d.risk_level === 'CRITICAL' ? 'var(--sanction-color)' : d.risk_level === 'HIGH' ? '#f0883e' : d.risk_level === 'MEDIUM' ? 'var(--pep-color)' : 'var(--text-dim)';
+      html += `<br>Risk: <span style="color:${rc};font-weight:600">${d.risk_score}/100 (${d.risk_level})</span>`;
+    }
+    if (d.confidence > 0) html += `<br>Confidence: ${Math.round(d.confidence * 100)}%`;
     tooltip.innerHTML = html;
     tooltip.classList.add('visible');
   })
@@ -899,6 +933,11 @@ function showDetail(d) {
   if (d.investigation) rows += `<div class="detail-row"><span class="label">Investigation</span><span>${d.investigation.replace(/-/g,' ')}</span></div>`;
   if (d.datasets&&d.datasets.length) rows += `<div class="detail-row"><span class="label">Datasets</span><span>${d.datasets.join(', ')}</span></div>`;
   if (d.score) rows += `<div class="detail-row"><span class="label">Match Score</span><span>${typeof d.score === 'number' ? d.score.toFixed(2) : d.score}</span></div>`;
+  if (d.confidence > 0) rows += `<div class="detail-row"><span class="label">Confidence</span><span>${Math.round(d.confidence * 100)}%</span></div>`;
+  if (d.risk_score > 0) {
+    const rc = d.risk_level === 'CRITICAL' ? 'var(--sanction-color)' : d.risk_level === 'HIGH' ? '#f0883e' : d.risk_level === 'MEDIUM' ? 'var(--pep-color)' : 'var(--text-dim)';
+    rows += `<div class="detail-row"><span class="label">Risk Score</span><span style="color:${rc};font-weight:600">${d.risk_score}/100 (${d.risk_level})</span></div>`;
+  }
   if (d.incorporation_date) rows += `<div class="detail-row"><span class="label">Incorporated</span><span>${d.incorporation_date}</span></div>`;
   if (d.topics&&d.topics.length) rows += `<div class="detail-row"><span class="label">Topics</span><span>${d.topics.join(', ')}</span></div>`;
 

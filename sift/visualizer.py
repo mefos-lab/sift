@@ -105,6 +105,9 @@ def _build_graph(data: dict) -> tuple[list[dict], list[dict]]:
             "incorporation_date": None,
             "country_codes": [],
             "hop": r.get("hop", 0),
+            "confidence": r.get("confidence", 0),
+            "risk_score": r.get("risk_score", 0),
+            "risk_level": r.get("risk_level", ""),
         }
 
     # 2. ICIJ entity details (enrich existing or add new)
@@ -231,6 +234,9 @@ def _build_graph(data: dict) -> tuple[list[dict], list[dict]]:
             "date_filed": r.get("date_filed", ""),
             "country_codes": props.get("nationality", props.get("citizenship", [])),
             "hop": r.get("hop", 0),
+            "confidence": r.get("confidence", 0),
+            "risk_score": r.get("risk_score", 0),
+            "risk_level": r.get("risk_level", ""),
         }
 
     # 5. Network edges (rewrite through canonical IDs, handle mixed sources)

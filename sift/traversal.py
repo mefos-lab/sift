@@ -462,6 +462,26 @@ async def traverse(
     from .pattern_matcher import match_patterns
     pattern_results = match_patterns(nodes, edges)
 
+    # ── Scoring ─────────────────────────────────────────────
+    from .scoring import compute_confidence, compute_risk_score
+    seed_query = " ".join(seed_names)
+    for n in nodes.values():
+        node_dict = {"label": n.label, "source": n.source, "node_type": n.node_type,
+                     "hop": n.hop, "score": n.properties.get("score"),
+                     "sanctioned": n.properties.get("sanctioned"),
+                     "pep": n.properties.get("pep"),
+                     "topics": n.properties.get("topics", []),
+                     "country_codes": n.properties.get("country_codes", []),
+                     "jurisdiction": n.properties.get("jurisdiction"),
+                     "investigation": n.properties.get("investigation"),
+                     "datasets": n.properties.get("datasets", []),
+                     "properties": n.properties}
+        n.properties["confidence"] = round(compute_confidence(node_dict, seed_query), 3)
+        risk = compute_risk_score(node_dict)
+        n.properties["risk_score"] = risk["score"]
+        n.properties["risk_level"] = risk["level"]
+        n.properties["risk_factors"] = risk["factors"]
+
     return TraversalResult(
         nodes=nodes,
         edges=edges,
@@ -521,6 +541,9 @@ def result_to_visualizer_data(
                 "types": [{"id": n.node_type.lower(), "name": n.node_type}],
                 "description": n.properties.get("description", ""),
                 "hop": n.hop,
+                "confidence": n.properties.get("confidence", 0),
+                "risk_score": n.properties.get("risk_score", 0),
+                "risk_level": n.properties.get("risk_level", ""),
             })
             countries = n.properties.get("country_codes", [])
             if countries:
@@ -541,6 +564,9 @@ def result_to_visualizer_data(
                 "datasets": n.properties.get("datasets", []),
                 "topics": topics,
                 "hop": n.hop,
+                "confidence": n.properties.get("confidence", 0),
+                "risk_score": n.properties.get("risk_score", 0),
+                "risk_level": n.properties.get("risk_level", ""),
             })
         else:
             # New sources — emit as opensanctions_results format for
@@ -561,6 +587,9 @@ def result_to_visualizer_data(
                         "datasets": [source],
                         "topics": n.properties.get("topics", []),
                         "hop": n.hop,
+                        "confidence": n.properties.get("confidence", 0),
+                        "risk_score": n.properties.get("risk_score", 0),
+                        "risk_level": n.properties.get("risk_level", ""),
                     })
                     break
 
