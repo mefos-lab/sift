@@ -33,6 +33,7 @@ class TraversalResult:
     pruned: list[str]
     budget_exhausted: bool
     stats: dict
+    pattern_matches: list[dict] = field(default_factory=list)
 
 
 def _normalize(name: str) -> str:
@@ -457,6 +458,10 @@ async def traverse(
                      if n.properties.get("sanctioned"))
     pep = sum(1 for n in nodes.values() if n.properties.get("pep"))
 
+    # ── Pattern matching ──────────────────────────────────────
+    from .pattern_matcher import match_patterns
+    pattern_results = match_patterns(nodes, edges)
+
     return TraversalResult(
         nodes=nodes,
         edges=edges,
@@ -473,7 +478,20 @@ async def traverse(
             "sanctioned": sanctioned,
             "pep": pep,
             "pruned_count": len(pruned),
+            "patterns_matched": pattern_results.stats["patterns_matched"],
         },
+        pattern_matches=[
+            {
+                "pattern": m.pattern_name,
+                "title": m.title,
+                "risk": m.risk_level,
+                "confidence": m.confidence,
+                "conditions_met": m.conditions_met,
+                "conditions_missed": m.conditions_missed,
+                "evidence": m.evidence[:5],
+            }
+            for m in pattern_results.matches
+        ],
     )
 
 

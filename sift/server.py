@@ -1550,6 +1550,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result["traversal_stats"] = traversal_result.stats
             if traversal_result.pruned:
                 result["pruned_nodes"] = traversal_result.pruned
+            if traversal_result.pattern_matches:
+                result["pattern_matches"] = traversal_result.pattern_matches
 
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
