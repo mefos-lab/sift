@@ -9,7 +9,7 @@ The unified investigation skill. Searches ICIJ Offshore Leaks and
 OpenSanctions, cross-references findings, detects patterns, and
 produces structured intelligence reports.
 
-**Before running**, load `patterns/INDEX.md` from the project root.
+**Before running**, load `patterns/INDEX.yaml` from the project root.
 
 ## Usage
 
@@ -69,7 +69,7 @@ For the highest-priority nodes from the traversal:
 
 ### Step 3: Pattern analysis
 
-Cross-reference findings against `patterns/INDEX.md`:
+Cross-reference findings against `patterns/INDEX.yaml`:
 - Starburst (hub-and-spoke)
 - Matryoshka (nested jurisdiction chains)
 - Nominee Shield (professional nominees)
@@ -144,7 +144,7 @@ risk level? Lead with the most significant finding.]
 
 ### Pattern matches
 
-[Named patterns from patterns/INDEX.md]
+[Named patterns from patterns/INDEX.yaml]
 
 ### Jurisdictional profile
 
@@ -227,7 +227,7 @@ and temporal patterns across all findings.
 
 ### Patterns identified
 
-#### [Pattern name] (from patterns/INDEX.md)
+#### [Pattern name] (from patterns/INDEX.yaml)
 - Evidence: [entities/connections]
 - Significance: [what it indicates]
 - Confidence: HIGH/MEDIUM/LOW
@@ -408,7 +408,7 @@ prominently:]
 > Entity X → *intermediary* → **Sanctioned Firm Y** (OFAC SDN)
 
 ### Pattern matches
-[Cross-reference against patterns/INDEX.md]
+[Cross-reference against patterns/INDEX.yaml]
 
 ### Risk assessment
 
@@ -441,4 +441,4 @@ prominently:]
 - Budget parameter prevents runaway API calls — increase for thorough work
 - High-connectivity nodes (>25 connections) are auto-pruned
 - For ongoing tracking after any investigation, suggest `/investigate <name> --monitor`
-- When a new pattern is found, propose adding it to `patterns/INDEX.md`
+- When a new pattern is found, propose adding it to `patterns/INDEX.yaml`

@@ -84,7 +84,7 @@ and node IDs where available]
 
 `/investigate` (all modes) should:
 
-1. Load `patterns/INDEX.md` before producing output
+1. Load `patterns/INDEX.yaml` before producing output
 2. Cross-reference findings against known patterns
 3. When a known pattern is identified, name it and cite the pattern file
 4. When a NEW pattern is identified, propose adding it to the library
@@ -97,6 +97,21 @@ and node IDs where available]
 
 Patterns are never deleted — they may be marked DEPRECATED if
 subsequent evidence shows they were misidentified.
+
+## Configuration
+
+Create a `.env` file in the project root:
+
+```
+OPENSANCTIONS_API_KEY=<your-key>          # Required — get from opensanctions.org
+SEC_EDGAR_USER_AGENT=sift contact@you.com # Required — any name + email
+COMPANIES_HOUSE_API_KEY=<your-key>        # Optional — get from developer.company-information.service.gov.uk
+COURTLISTENER_API_TOKEN=<your-token>      # Optional — get from courtlistener.com/profile/api/
+```
+
+ICIJ, GLEIF, and SEC EDGAR work without keys. OpenSanctions requires
+a free API key. Companies House and CourtListener are optional — if
+keys are missing, those sources are silently skipped.
 
 ## Conventions
 

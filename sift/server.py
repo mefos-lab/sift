@@ -36,6 +36,9 @@ _load_env()
 
 server = Server("sift")
 
+# Session state — stores the last investigation for export
+_last_investigation: dict | None = None
+
 # Core sources (no auth required)
 icij_client = ICIJClient()
 gleif_client = GLEIFClient()
@@ -879,7 +882,7 @@ async def list_tools() -> list[Tool]:
                         "description": "The investigation data dict from a deep_trace result",
                     },
                 },
-                "required": ["investigation_data"],
+                "required": [],
             },
         ),
         Tool(
@@ -898,7 +901,7 @@ async def list_tools() -> list[Tool]:
                         "description": "The investigation data dict from a deep_trace result",
                     },
                 },
-                "required": ["investigation_data"],
+                "required": [],
             },
         ),
 
@@ -1231,27 +1234,54 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         elif name == "query":
             question = arguments["question"]
             routed = route_query(question)
-            result = {
-                "question": question,
-                "routed_to": routed,
-                "instructions": (
-                    "The query has been parsed into tool calls. Execute each "
-                    "tool in the 'routed_to' list to answer the question. "
-                    "Each entry has 'tool' (the MCP tool name), 'args' "
-                    "(arguments to pass), and 'purpose' (what it will find)."
-                ),
-            }
+
+            # Auto-execute single-tool queries for simple cases
+            auto_execute = len(routed) == 1 and routed[0]["tool"] in (
+                "background_check", "sanctions_match", "court_search",
+                "sec_search", "icij_search", "gleif_search",
+            )
+
+            if auto_execute:
+                # Recursively call the routed tool
+                tool_name = routed[0]["tool"]
+                tool_args = routed[0]["args"]
+                inner_result = await call_tool(tool_name, tool_args)
+                # Return the result with routing context
+                result = {
+                    "question": question,
+                    "executed": routed[0],
+                    "result": json.loads(inner_result[0].text) if inner_result else None,
+                }
+            else:
+                result = {
+                    "question": question,
+                    "routed_to": routed,
+                    "instructions": (
+                        "The query has been parsed into tool calls. Execute each "
+                        "tool in the 'routed_to' list to answer the question. "
+                        "Each entry has 'tool' (the MCP tool name), 'args' "
+                        "(arguments to pass), and 'purpose' (what it will find)."
+                    ),
+                }
 
         # =============================================================
         # Export tools
         # =============================================================
         elif name == "export_json":
-            path = export_json(arguments["investigation_data"])
-            result = {"exported": str(path), "format": "json"}
+            data = arguments.get("investigation_data") or _last_investigation
+            if not data:
+                result = {"error": "No investigation data available. Run deep_trace or background_check first."}
+            else:
+                path = export_json(data)
+                result = {"exported": str(path), "format": "json"}
 
         elif name == "export_report":
-            path = export_markdown(arguments["investigation_data"])
-            result = {"exported": str(path), "format": "markdown"}
+            data = arguments.get("investigation_data") or _last_investigation
+            if not data:
+                result = {"error": "No investigation data available. Run deep_trace or background_check first."}
+            else:
+                path = export_markdown(data)
+                result = {"exported": str(path), "format": "markdown"}
 
         # =============================================================
         # Compound investigation tools
@@ -1621,6 +1651,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             result = profile
 
+            # Save for export
+            global _last_investigation
+            _last_investigation = result
+
         elif name == "deep_trace":
             names = arguments["names"]
             depth = arguments.get("depth", 2)
@@ -1648,6 +1682,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 result["pruned_nodes"] = traversal_result.pruned
             if traversal_result.pattern_matches:
                 result["pattern_matches"] = traversal_result.pattern_matches
+
+            # Save for export
+            global _last_investigation
+            _last_investigation = result
 
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]

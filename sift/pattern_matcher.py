@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-PATTERNS_DIR = Path(__file__).resolve().parent.parent / "patterns" / "yaml"
+PATTERNS_DIR = Path(__file__).resolve().parent.parent / "patterns"
 
 
 @dataclass

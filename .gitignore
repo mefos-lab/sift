@@ -5,3 +5,6 @@ dist/
 build/
 .venv/
 .env
+investigations/*.html
+investigations/*.json
+investigations/*.md

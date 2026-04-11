@@ -36,6 +36,16 @@ def route_query(query: str) -> list[dict]:
             "purpose": f"Comprehensive search across all 6 sources for '{subject}'",
         })
 
+    elif _matches(q, ["monitor", "watch", "track", "new listings",
+                       "changed since", "recent listings"]):
+        from datetime import datetime, timedelta
+        since = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+        calls.append({
+            "tool": "sanctions_monitor",
+            "args": {"query": subject, "since": since},
+            "purpose": f"Check for new sanctions listings for '{subject}' since {since}",
+        })
+
     elif _matches(q, ["sanctioned", "sanctions", "on any lists",
                        "sanctions list", "is .* sanctioned", "pep",
                        "politically exposed"]):
@@ -137,14 +147,6 @@ def route_query(query: str) -> list[dict]:
                 "args": {"names": [subject], "depth": 2, "budget": 50},
                 "purpose": f"Deep network trace for '{subject}'",
             })
-
-    elif _matches(q, ["monitor", "watch", "track", "new listings",
-                       "changed", "recent"]):
-        calls.append({
-            "tool": "sanctions_monitor",
-            "args": {"query": subject, "since": "2025-01-01"},
-            "purpose": f"Check for new sanctions listings for '{subject}'",
-        })
 
     elif _matches(q, ["export", "report", "save", "download", "pdf",
                        "markdown", "json"]):
