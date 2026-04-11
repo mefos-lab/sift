@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Investigation Visualization</title>
 <script>__D3_INLINE__</script>
+<script src="__D3_SRC__"></script>
+<script src="data.js?v=__BUILD_TS__"></script>
 <style>
   :root {
     --bg: #0d1117;
@@ -24,6 +26,9 @@
     --sec-color: #39d2c0;
     --uk-color: #a78bfa;
     --court-color: #f97583;
+    --aleph-color: #79c0ff;
+    --wikidata-color: #56d4dd;
+    --land-color: #7ee787;
     --edge-color: #30363d;
     --accent-green: #3fb950;
   }
@@ -96,6 +101,15 @@
     font-size: 12px; color: var(--text-muted); margin-top: 6px;
     line-height: 1.5;
   }
+  .summary-card[data-tooltip] { cursor: help; position: relative; }
+  .summary-card .card-tooltip {
+    display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
+    transform: translateX(-50%); background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 12px; font-size: 11px; color: var(--text-muted);
+    line-height: 1.6; width: 280px; z-index: 150; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    pointer-events: none;
+  }
+  .summary-card:hover .card-tooltip { display: block; }
   .findings-narrative {
     font-size: 13px; color: var(--text-muted); line-height: 1.7;
     max-width: 900px;
@@ -280,7 +294,75 @@
   }
   .pattern-card .pattern-desc {
     font-size: 11px; color: var(--text-muted); line-height: 1.5;
+    margin-top: 6px;
   }
+  .pattern-card .pattern-expand {
+    font-size: 10px; color: var(--text-dim); cursor: pointer;
+    margin-top: 4px; user-select: none;
+  }
+  .pattern-card .pattern-expand:hover { color: var(--text-muted); }
+  .pattern-card .pattern-detail {
+    display: none; margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .pattern-card .pattern-detail.open { display: block; }
+
+  /* Sortable table headers */
+  .matrix-table th.sortable { cursor: pointer; user-select: none; }
+  .matrix-table th.sortable:hover { color: var(--text); }
+  .matrix-table th .sort-arrow { font-size: 10px; margin-left: 4px; opacity: 0.5; }
+  .matrix-table th.sorted .sort-arrow { opacity: 1; color: var(--icij-color); }
+
+  /* Narrative collapsible section */
+  .narrative-section { margin-top: 16px; }
+  .narrative-header {
+    display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; padding: 8px 0; border-top: 1px solid var(--border);
+  }
+  .narrative-header h3 {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-muted);
+  }
+  .narrative-toggle {
+    background: none; border: 1px solid var(--border); color: var(--text-muted);
+    padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 10px;
+  }
+  .narrative-subsection { margin-bottom: 14px; }
+  .narrative-subsection h4 {
+    font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px;
+    padding-bottom: 4px; border-bottom: 1px solid var(--border);
+  }
+  .pattern-callout {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px; margin-top: 10px;
+  }
+  .pattern-callout .callout-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--both-color); margin-bottom: 8px;
+  }
+  .pattern-callout-item {
+    font-size: 12px; color: var(--text-muted); line-height: 1.6; margin-bottom: 4px;
+  }
+
+  /* Pattern banner overlays for tabs */
+  .pattern-banner {
+    background: rgba(188,140,255,0.08); border: 1px solid rgba(188,140,255,0.25);
+    border-radius: 6px; padding: 10px 14px; margin-bottom: 16px;
+  }
+  .pattern-banner .banner-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--both-color); margin-bottom: 6px;
+  }
+  .pattern-banner .banner-item {
+    font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 2px;
+  }
+  .pattern-banner .banner-item .risk-badge {
+    font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+    margin-left: 6px; display: inline-block;
+  }
+
+  /* Tab tooltip */
+  .tab-btn[title] { position: relative; }
 </style>
 </head>
 <body>
@@ -310,20 +392,28 @@
   </div>
   <div id="summaryContent">
     <div class="summary-grid" id="summaryGrid"></div>
-    <div class="findings-narrative" id="narrative"></div>
+    <div class="narrative-section">
+      <div class="narrative-header" id="narrativeHeader">
+        <h3>Intelligence Assessment</h3>
+        <button class="narrative-toggle" id="narrativeToggle">Collapse</button>
+      </div>
+      <div id="narrativeBody">
+        <div class="findings-narrative" id="narrative"></div>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- Tab navigation -->
 <div class="tab-bar">
-  <button class="tab-btn active" data-tab="network">Network Graph</button>
-  <button class="tab-btn" data-tab="ownership">Ownership Tree</button>
-  <button class="tab-btn" data-tab="coverage">Source Coverage</button>
-  <button class="tab-btn" data-tab="multi-timeline">Multi-Source Timeline</button>
-  <button class="tab-btn" data-tab="corporate">Corporate Structure</button>
-  <button class="tab-btn" data-tab="flow">Jurisdiction Flow</button>
-  <button class="tab-btn" data-tab="timeline">Timeline Analysis</button>
-  <button class="tab-btn" data-tab="matrix">Source Matrix</button>
+  <button class="tab-btn active" data-tab="network" title="Interactive force-directed graph showing all entities and their relationships. Drag nodes, zoom, and click for details.">Network Graph</button>
+  <button class="tab-btn" data-tab="ownership" title="Corporate ownership hierarchy from GLEIF LEI data. Shows parent-subsidiary relationships as a tree.">Ownership Tree</button>
+  <button class="tab-btn" data-tab="coverage" title="Heatmap showing which data sources contain information about each entity. Entities in 3+ sources are highest-value.">Source Coverage</button>
+  <button class="tab-btn" data-tab="corporate" title="Vertical corporate structure showing ownership, directorship, and beneficial control relationships.">Corporate Structure</button>
+  <button class="tab-btn" data-tab="flow" title="Bipartite flow diagram showing how people connect to offshore jurisdictions. Wider bands indicate more connections.">Jurisdiction Flow</button>
+  <button class="tab-btn" data-tab="timeline" title="All dated events across sources — leak investigations, SEC filings, court cases, entity formations. Swim-lane view, investigation timeline, and narrative chronology.">Timeline</button>
+  <button class="tab-btn" data-tab="matrix" title="Full cross-reference matrix of every entity found, with source, type, risk flags, and investigation data.">Source Matrix</button>
+  <button class="tab-btn" data-tab="patterns" title="Reference glossary: pattern definitions, risk levels, data source descriptions, jurisdiction context, PEP/sanctions designations, and scoring methodology.">Reference</button>
 </div>
 
 <!-- Tab: Network -->
@@ -345,17 +435,20 @@
       <div id="patternCards"></div>
       <div class="legend">
         <h3>Legend</h3>
-        <div class="legend-item"><div class="legend-swatch" style="background:var(--icij-color)"></div>ICIJ Offshore Leaks</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:var(--os-color)"></div>OpenSanctions</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:var(--gleif-color)"></div>GLEIF (Corporate Registry)</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:var(--sec-color)"></div>SEC EDGAR</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:var(--uk-color)"></div>UK Companies House</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:var(--court-color)"></div>CourtListener</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:var(--both-color)"></div>Multiple sources</div>
-        <div class="legend-item"><div class="legend-swatch" style="border:2px solid var(--sanction-color);background:transparent"></div>Sanctioned</div>
-        <div class="legend-item"><div class="legend-swatch" style="border:2px solid var(--pep-color);background:transparent"></div>Politically exposed</div>
-        <div class="legend-item"><div class="legend-swatch rect" style="background:var(--icij-color)"></div>Entity / Company</div>
-        <div class="legend-item"><div class="legend-swatch diamond" style="background:var(--icij-color)"></div>Intermediary</div>
+        <div class="legend-item" title="ICIJ Offshore Leaks database — 810K+ entities from 5 major leak investigations (Panama Papers, Paradise Papers, Pandora Papers, Bahamas Leaks, Offshore Leaks)"><div class="legend-swatch" style="background:var(--icij-color)"></div>ICIJ Offshore Leaks</div>
+        <div class="legend-item" title="OpenSanctions — consolidated sanctions lists, PEP databases, and enforcement records from 320+ sources worldwide"><div class="legend-swatch" style="background:var(--os-color)"></div>OpenSanctions</div>
+        <div class="legend-item" title="Global Legal Entity Identifier Foundation — the ISO 17442 standard for identifying legal entities in financial transactions"><div class="legend-swatch" style="background:var(--gleif-color)"></div>GLEIF (Corporate Registry)</div>
+        <div class="legend-item" title="US Securities and Exchange Commission Electronic Data Gathering — public company filings (10-K, 10-Q, 8-K, proxy statements)"><div class="legend-swatch" style="background:var(--sec-color)"></div>SEC EDGAR</div>
+        <div class="legend-item" title="Official UK company registry — includes company records, officer appointments, and Persons with Significant Control (PSC) beneficial ownership data"><div class="legend-swatch" style="background:var(--uk-color)"></div>UK Companies House</div>
+        <div class="legend-item" title="US federal court records from the PACER/RECAP archive — civil and criminal case filings, docket entries, and court opinions"><div class="legend-swatch" style="background:var(--court-color)"></div>CourtListener</div>
+        <div class="legend-item" title="Aleph — OCCRP data platform aggregating corporate registries, court records, and investigative datasets from multiple countries"><div class="legend-swatch" style="background:var(--aleph-color)"></div>Aleph (OCCRP)</div>
+        <div class="legend-item" title="Wikidata — structured data from Wikimedia covering entities, organizations, and their relationships"><div class="legend-swatch" style="background:var(--wikidata-color)"></div>Wikidata</div>
+        <div class="legend-item" title="Land Registry — property ownership records showing real estate holdings and beneficial ownership"><div class="legend-swatch" style="background:var(--land-color)"></div>Land Registry</div>
+        <div class="legend-item" title="Entity found in two or more independent databases — cross-references are the highest-value findings in any investigation"><div class="legend-swatch" style="background:var(--both-color)"></div>Multiple sources</div>
+        <div class="legend-item" title="Entity is on one or more active international sanctions lists (OFAC, EU, UK, UN). Financial transactions may be legally prohibited."><div class="legend-swatch" style="border:2px solid var(--sanction-color);background:transparent"></div>Sanctioned</div>
+        <div class="legend-item" title="Politically Exposed Person — current or former government officials, their family, and close associates. AML regulations require enhanced due diligence."><div class="legend-swatch" style="border:2px solid var(--pep-color);background:transparent"></div>Politically exposed</div>
+        <div class="legend-item" title="Rectangular nodes represent registered entities or companies — legal structures in offshore jurisdictions"><div class="legend-swatch rect" style="background:var(--icij-color)"></div>Entity / Company</div>
+        <div class="legend-item" title="Diamond nodes represent intermediaries — law firms, banks, or corporate service providers that help set up offshore structures"><div class="legend-swatch diamond" style="background:var(--icij-color)"></div>Intermediary</div>
       </div>
     </div>
   </div>
@@ -388,42 +481,27 @@
   </div>
 </div>
 
-<!-- Tab: Multi-Source Timeline -->
-<div class="tab-content" id="tab-multi-timeline">
-  <div class="timeline-container">
-    <div class="timeline-section">
-      <h3>Multi-Source Event Timeline</h3>
-      <p class="explanation">
-        Plots events from all sources on a single timeline: ICIJ leak investigations,
-        SEC filing dates, court case filing dates, and sanctions listing dates.
-        Shows the narrative arc across independent data sources.
-      </p>
-      <svg id="multiTimelineSvg" height="400"></svg>
-    </div>
-    <div class="timeline-section" id="narrativeTimeline">
-      <h3>Narrative Timeline</h3>
-      <p class="explanation">
-        Chronological story of key events across all sources. Read top to bottom
-        to understand the sequence of events — when entities were formed, when
-        investigations surfaced them, when legal proceedings began, and when
-        regulatory actions occurred.
-      </p>
-      <div id="narrativeContent" style="max-width:700px"></div>
-    </div>
-  </div>
-</div>
+<!-- Multi-Source Timeline tab removed — merged into Timeline Analysis -->
 
 <!-- Tab: Corporate Structure -->
 <div class="tab-content" id="tab-corporate">
-  <div class="flow-container">
-    <h3 style="margin-bottom:8px">Corporate Structure</h3>
-    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+  <div class="flow-container" style="padding-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 style="margin:0">Corporate Structure</h3>
+      <div style="display:flex;gap:6px">
+        <button id="corpFitBtn" style="background:var(--bg);border:1px solid var(--border);color:var(--text-muted);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px" title="Fit entire tree to view">Fit to View</button>
+        <button id="corpResetBtn" style="background:var(--bg);border:1px solid var(--border);color:var(--text-muted);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px" title="Reset zoom to 100%">Reset Zoom</button>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;max-width:700px;line-height:1.6">
       Vertical view of corporate relationships — ownership, directorship, and beneficial
-      control. PSC (Persons with Significant Control) ownership percentages shown where
-      available. Designed for <code>beneficial_owner</code> and <code>ownership_trace</code> results.
+      control. Scroll to zoom, drag to pan. Use "Fit to View" to see the full tree.
     </p>
+    <div id="corporatePatternBanner"></div>
     <div id="corporateEmpty" style="display:none;color:var(--text-dim);font-size:13px;padding:40px;">No corporate structure data available. Entities with parent/subsidiary or PSC relationships will appear here.</div>
-    <svg id="corporateSvg"></svg>
+    <div id="corporateWrapper" style="overflow:hidden;border:1px solid var(--border);border-radius:6px;background:var(--bg);height:calc(100vh - 260px);min-height:400px">
+      <svg id="corporateSvg" style="width:100%;height:100%"></svg>
+    </div>
   </div>
 </div>
 
@@ -436,6 +514,7 @@
       Right column: entity/intermediary jurisdictions. Connections show which people are linked to
       entities in which offshore jurisdictions. Wider bands = more connections.
     </p>
+    <div id="flowPatternBanner"></div>
     <svg id="flowSvg"></svg>
   </div>
 </div>
@@ -444,22 +523,30 @@
 <div class="tab-content" id="tab-timeline">
   <div class="timeline-container">
     <div class="timeline-section">
-      <h3>Investigation Sources Timeline</h3>
+      <h3>Multi-Source Event Timeline</h3>
+      <p class="explanation">
+        All dated events from every source on a single swim-lane timeline: ICIJ leak investigations,
+        SEC filing dates, court case filing dates, and entity formation dates.
+        Shows the narrative arc across independent data sources.
+      </p>
+      <svg id="multiTimelineSvg" height="400"></svg>
+    </div>
+    <div class="timeline-section">
+      <h3>Investigation Sources</h3>
       <p class="explanation">
         Shows which leak investigations surfaced data about this subject.
         Each investigation covers a different time period and set of offshore service providers.
-        Appearing across multiple leaks suggests a sustained offshore presence — the structures
-        weren't set up once and forgotten, but maintained across years and jurisdictions.
+        Appearing across multiple leaks suggests a sustained offshore presence.
       </p>
       <svg id="investigationTimeline" height="180"></svg>
     </div>
-    <div class="timeline-section">
-      <h3>Entity Incorporation Timeline</h3>
+    <div class="timeline-section" id="incorporationSection">
+      <h3>Entity Formation &amp; Filing Dates</h3>
       <p class="explanation">
-        Plots entity incorporation dates when available. Clusters of formations within a short
-        window may indicate <strong>temporal patterns</strong> — entities created in response to
-        external events such as sanctions announcements, elections, regulatory changes, or
-        personal events (divorce, litigation, political exposure).
+        Plots entity incorporation dates, SEC filing dates, and court case dates.
+        Clusters of events within a short window may indicate
+        <strong>temporal patterns</strong> — activity triggered by external events such as
+        sanctions announcements, elections, or regulatory changes.
       </p>
       <svg id="incorporationTimeline" height="200"></svg>
     </div>
@@ -467,6 +554,84 @@
       <h3>Temporal Pattern Analysis</h3>
       <div id="temporalFindings" style="font-size:13px;color:var(--text-muted);line-height:1.7;max-width:700px"></div>
     </div>
+    <div class="timeline-section" id="narrativeTimeline">
+      <h3>Narrative Timeline</h3>
+      <p class="explanation">
+        Chronological story of key events across all sources. Read top to bottom
+        to understand the sequence — when entities were formed, when investigations
+        surfaced them, when legal proceedings began.
+      </p>
+      <div id="narrativeContent" style="max-width:700px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab: Patterns -->
+<div class="tab-content" id="tab-patterns">
+  <div class="matrix-container" style="max-width:900px">
+    <h3 style="margin-bottom:4px">Reference</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">
+      Definitions and context for all concepts used in this investigation. Click any
+      highlighted term elsewhere in the viewer to jump here.
+    </p>
+
+    <!-- Table of Contents -->
+    <nav style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin-bottom:20px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);font-weight:600;margin-bottom:8px">Contents</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;font-size:12px">
+        <a href="#" onclick="goToRef('ref-patterns');return false" style="color:var(--icij-color);text-decoration:none">Detected Patterns</a>
+        <a href="#" onclick="goToRef('ref-risk');return false" style="color:var(--icij-color);text-decoration:none">Risk Levels</a>
+        <a href="#" onclick="goToRef('ref-designations');return false" style="color:var(--icij-color);text-decoration:none">Designations (PEP, Sanctions, RCA)</a>
+        <a href="#" onclick="goToRef('ref-sources');return false" style="color:var(--icij-color);text-decoration:none">Data Sources</a>
+        <a href="#" onclick="goToRef('ref-jurisdictions');return false" style="color:var(--icij-color);text-decoration:none">Jurisdictions</a>
+        <a href="#" onclick="goToRef('ref-legend');return false" style="color:var(--icij-color);text-decoration:none">Visual Legend</a>
+        <a href="#" onclick="goToRef('ref-network-depth');return false" style="color:var(--icij-color);text-decoration:none">Network Depth (Hops)</a>
+        <a href="#" onclick="goToRef('ref-scoring');return false" style="color:var(--icij-color);text-decoration:none">Confidence &amp; Risk Scoring</a>
+        <a href="#" onclick="goToRef('ref-next-steps');return false" style="color:var(--icij-color);text-decoration:none">Recommended Next Steps</a>
+      </div>
+    </nav>
+
+    <!-- Patterns section -->
+    <div id="ref-patterns-section">
+      <h4 id="ref-patterns" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">Detected Patterns</h4>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
+        Structural patterns matched against FATF money laundering typologies, Moody's shell company
+        indicators, and ICIJ investigative methodologies.
+      </p>
+      <div id="patternTabContent"></div>
+    </div>
+
+    <!-- Risk Levels section -->
+    <h4 id="ref-risk" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">Risk Levels</h4>
+    <div id="refRiskContent"></div>
+
+    <!-- Designations section -->
+    <h4 id="ref-designations" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">Designations</h4>
+    <div id="refDesignationsContent"></div>
+
+    <!-- Data Sources section -->
+    <h4 id="ref-sources" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">Data Sources</h4>
+    <div id="refSourcesContent"></div>
+
+    <!-- Jurisdictions section -->
+    <h4 id="ref-jurisdictions" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">Jurisdictions in This Investigation</h4>
+    <div id="refJurisdictionsContent"></div>
+
+    <!-- Legend section -->
+    <h4 id="ref-legend" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">Visual Legend</h4>
+    <div id="refLegendContent"></div>
+
+    <!-- Network Depth section -->
+    <h4 id="ref-network-depth" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">Network Depth (Hops)</h4>
+    <div id="refNetworkDepthContent"></div>
+
+    <!-- Scoring section -->
+    <h4 id="ref-scoring" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">Confidence &amp; Risk Scoring</h4>
+    <div id="refScoringContent"></div>
+
+    <!-- Recommended Next Steps section -->
+    <h4 id="ref-next-steps" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">Recommended Next Steps</h4>
+    <div id="refNextStepsContent"></div>
   </div>
 </div>
 
@@ -483,12 +648,12 @@
     <table class="matrix-table" id="matrixTable">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Sources</th>
-          <th>Countries</th>
-          <th>Risk Flags</th>
-          <th>Investigation</th>
+          <th class="sortable" data-col="0" data-type="alpha" title="Entity name as it appears in the source database">Name <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="1" data-type="alpha" title="Entity classification: Person, Officer, Entity (company), Intermediary, Address, or Case">Type <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="2" data-type="alpha" title="Which databases contain this entity — ICIJ (offshore leaks) and/or OpenSanctions (sanctions/PEP)">Sources <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="3" data-type="alpha" title="Countries/jurisdictions associated with this entity through nationality, registration, or address">Countries <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="4" data-type="alpha" title="Risk indicators: Sanctioned (on sanctions lists), PEP (politically exposed person), RCA (close associate of PEP)">Risk Flags <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="5" data-type="alpha" title="Which ICIJ leak investigation surfaced this entity (Panama Papers, Paradise Papers, etc.)">Investigation <span class="sort-arrow"></span></th>
         </tr>
       </thead>
       <tbody id="matrixBody"></tbody>
@@ -504,7 +669,7 @@
     <span style="margin-left:8px">Public records intelligence for investigative journalism</span>
   </div>
   <div style="font-size:10px;color:var(--text-dim)">
-    Sources: ICIJ Offshore Leaks, OpenSanctions, GLEIF, SEC EDGAR, UK Companies House, CourtListener
+    Sources: ICIJ Offshore Leaks, OpenSanctions, GLEIF, SEC EDGAR, UK Companies House, CourtListener, Aleph, Wikidata, Land Registry
   </div>
 </div>
 
@@ -512,10 +677,10 @@
 // ============================================================
 // DATA
 // ============================================================
-const INVESTIGATION_DATA = __INVESTIGATION_DATA__;
-const data = INVESTIGATION_DATA;
-const nodes = data.nodes;
-const edges = data.edges;
+// __PORTABLE_DATA_INLINE__
+const data = (typeof SIFT_DATA !== 'undefined') ? SIFT_DATA : {};
+const nodes = data.nodes || [];
+const edges = data.edges || [];
 
 // Guard: if d3 didn't load, show an error message instead of a blank graph
 if (typeof d3 === 'undefined') {
@@ -531,6 +696,17 @@ document.getElementById('toggleSummary').addEventListener('click', function() {
   const isHidden = content.style.display === 'none';
   content.style.display = isHidden ? '' : 'none';
   this.textContent = isHidden ? 'Collapse' : 'Expand';
+});
+
+// ============================================================
+// NARRATIVE TOGGLE
+// ============================================================
+document.getElementById('narrativeHeader').addEventListener('click', function() {
+  const body = document.getElementById('narrativeBody');
+  const btn = document.getElementById('narrativeToggle');
+  const isHidden = body.style.display === 'none';
+  body.style.display = isHidden ? '' : 'none';
+  btn.textContent = isHidden ? 'Collapse' : 'Expand';
 });
 
 // ============================================================
@@ -558,9 +734,13 @@ const gleifCount = nodes.filter(n => n.source === 'gleif').length;
 const secCount = nodes.filter(n => n.source === 'sec').length;
 const ukCount = nodes.filter(n => n.source === 'companies_house').length;
 const courtCount = nodes.filter(n => n.source === 'courtlistener').length;
+const alephCount = nodes.filter(n => n.source === 'aleph').length;
+const wikidataCount = nodes.filter(n => n.source === 'wikidata').length;
+const landCount = nodes.filter(n => n.source === 'land_registry').length;
 const allSources = [
   icijCount && 'ICIJ', osCount && 'OpenSanctions', gleifCount && 'GLEIF',
-  secCount && 'SEC', ukCount && 'UK Co. House', courtCount && 'CourtListener'
+  secCount && 'SEC', ukCount && 'UK Co. House', courtCount && 'CourtListener',
+  alephCount && 'Aleph', wikidataCount && 'Wikidata', landCount && 'Land Registry'
 ].filter(Boolean);
 
 const patternMatches = data.pattern_matches || [];
@@ -608,11 +788,14 @@ document.getElementById('title').innerHTML =
 // ============================================================
 const grid = document.getElementById('summaryGrid');
 
-function addCard(label, value, detail, cls = '') {
+function addCard(label, value, detail, cls = '', refId = '') {
   const card = document.createElement('div');
   card.className = 'summary-card ' + cls;
+  const refLink = refId
+    ? ` <a href="#" onclick="goToRef('${refId}');return false" style="color:var(--text-dim);text-decoration:none;font-size:10px" title="See definition in Reference tab">&#x2197;</a>`
+    : '';
   card.innerHTML = `
-    <div class="card-label">${label}</div>
+    <div class="card-label">${label}${refLink}</div>
     <div class="card-value" ${cls === 'critical' ? 'style="color:var(--sanction-color)"' : cls === 'warning' ? 'style="color:var(--pep-color)"' : ''}>${value}</div>
     <div class="card-detail">${detail}</div>
   `;
@@ -643,29 +826,35 @@ if (isMultiSeed) {
 }
 
 addCard('Entities Found', nodes.length,
-  `Across ${allSources.length} sources: ${allSources.join(', ')}`,
-  'info');
+  `${nodes.length} unique entities discovered across ${allSources.length} databases (${allSources.join(', ')}). Each entity is a person, company, address, or intermediary connected to the investigation subject.`,
+  'info', 'ref-sources');
 
 if (sanctionedCount > 0) {
+  const sanctionedNames = nodes.filter(n => n.sanctioned).map(n => n.label).slice(0, 3);
   addCard('Sanctioned', sanctionedCount,
-    'Active sanctions designations found — entities on international sanctions lists',
-    'critical');
+    `${sanctionedCount} entit${sanctionedCount > 1 ? 'ies' : 'y'} on <a href="#" onclick="goToRef('ref-sanctioned');return false" style="color:var(--sanction-color)">international sanctions lists</a> (OFAC, EU, UK, UN): ${sanctionedNames.join(', ')}${sanctionedCount > 3 ? '...' : ''}. Active designations mean legal restrictions on financial transactions.`,
+    'critical', 'ref-sanctioned');
 }
 
 if (crossLinked > 0) {
   addCard('Cross-Referenced', crossLinked,
-    'Entities appearing in BOTH offshore leaks and sanctions/PEP databases — highest investigative value',
-    crossLinked > 0 ? 'warning' : 'info');
+    `${crossLinked} entit${crossLinked > 1 ? 'ies appear' : 'y appears'} in BOTH offshore leak databases AND sanctions/PEP lists. These are the highest-value findings — two independent sources corroborate each other.`,
+    crossLinked > 0 ? 'warning' : 'info', 'ref-cross-linked');
 }
 
 if (pepCount > 0) {
+  const pepNames = nodes.filter(n => n.pep).map(n => n.label).slice(0, 5);
+  const pepExtra = pepCount > 5 ? ` and ${pepCount - 5} more` : '';
   addCard('PEP Connections', pepCount,
-    'Links to politically exposed persons — triggers enhanced due diligence under AML frameworks',
-    'warning');
+    `${pepCount} <a href="#" onclick="goToRef('ref-pep');return false" style="color:var(--pep-color)">Politically Exposed Person${pepCount > 1 ? 's' : ''}</a>: ${pepNames.join(', ')}${pepExtra}. PEP status indicates elevated corruption risk due to position of influence — triggers <a href="#" onclick="goToRef('ref-pep');return false" style="color:var(--pep-color)">enhanced due diligence</a> under AML/KYC regulations.`,
+    'warning', 'ref-pep');
 }
 
-addCard('Jurisdictions', Object.keys(allCountries).length,
-  'Distinct countries/jurisdictions across all entities. More jurisdictions = more complex structure.');
+const jKeys = Object.keys(allCountries);
+const jLinked = jKeys.sort().map(j => `<a href="#" onclick="goToRef('ref-jur-${j.toLowerCase()}');return false" style="color:var(--icij-color)">${j}</a>`).join(', ');
+addCard('Jurisdictions', jKeys.length,
+  `Entities registered across ${jKeys.length} distinct countries: ${jLinked}. Multi-jurisdiction structures exploit gaps between regulatory regimes.`,
+  jKeys.length > 4 ? 'warning' : '', 'ref-jurisdictions');
 
 if (maxHop > 0) {
   const hopBreakdown = [];
@@ -673,61 +862,47 @@ if (maxHop > 0) {
     const cnt = nodes.filter(n => (n.hop||0) === h).length;
     hopBreakdown.push(`Hop ${h}: ${cnt}`);
   }
-  addCard('Network Depth', maxHop + ' hops',
-    hopBreakdown.join(', ') + '. Deeper hops reveal indirect connections — shared officers, intermediaries, and second-degree sanctions exposure.',
-    'info');
+  // Compute what was found at each hop
+  const hop0Sanctioned = nodes.filter(n => (n.hop||0) === 0 && n.sanctioned).length;
+  const hop1Sanctioned = nodes.filter(n => (n.hop||0) === 1 && n.sanctioned).length;
+  const hop0Pep = nodes.filter(n => (n.hop||0) === 0 && n.pep).length;
+  const hop1Pep = nodes.filter(n => (n.hop||0) === 1 && n.pep).length;
+  const hopDetails = hopBreakdown.map((hb, h) => {
+    const cnt = nodes.filter(n => (n.hop||0) === h).length;
+    const types = {};
+    nodes.filter(n => (n.hop||0) === h).forEach(n => { types[n.type || 'Unknown'] = (types[n.type || 'Unknown'] || 0) + 1; });
+    const typeStr = Object.entries(types).sort((a,b) => b[1]-a[1]).map(([t,c]) => `${c} ${t}${c>1?'s':''}`).join(', ');
+    const flags = [];
+    const hSanc = nodes.filter(n => (n.hop||0) === h && n.sanctioned).length;
+    const hPep = nodes.filter(n => (n.hop||0) === h && n.pep).length;
+    if (hSanc) flags.push(`${hSanc} sanctioned`);
+    if (hPep) flags.push(`${hPep} PEP`);
+    return `<strong>Hop ${h}</strong> (${cnt} entities: ${typeStr})${flags.length ? ' — <span style="color:var(--sanction-color)">' + flags.join(', ') + '</span>' : ''}`;
+  });
+  let depthExplanation = hopDetails.map(d => '&nbsp;&nbsp;' + d).join('<br>');
+  if (hop1Sanctioned || hop1Pep) {
+    depthExplanation += `<br>Flagged entities at hop 1+ indicate indirect exposure through intermediary structures.`;
+  }
+  addCard('Network Depth', maxHop + ' hop' + (maxHop !== 1 ? 's' : ''), depthExplanation, 'info', 'ref-network-depth');
 }
 
 addCard('Leak Investigations', investigations.length || 'N/A',
   investigations.length
-    ? investigations.map(i => i.replace(/-/g, ' ')).join(', ')
-    : 'No investigation source data available');
+    ? `Subject appears in ${investigations.length} ICIJ leak investigation${investigations.length > 1 ? 's' : ''}: ${investigations.map(i => i.replace(/-/g, ' ')).join(', ')}. Each covers a different offshore service provider (e.g. Mossack Fonseca, Appleby). Appearing in multiple leaks indicates sustained offshore activity.`
+    : 'No ICIJ leak investigation data found for this subject.',
+  '', 'ref-src-icij');
 
 const pmHighRisk = patternMatches.filter(p => p.risk === 'CRITICAL' || p.risk === 'HIGH').length;
+const pmHighConf = patternMatches.filter(p => p.confidence === 'high');
 if (patternMatches.length > 0) {
+  const patternLinks = patternMatches.map(p => `<a href="#" onclick="goToPattern('${p.pattern||p.title}');return false" style="color:var(--both-color)">${p.title}</a>`).join(', ');
   addCard('Patterns Detected', patternMatches.length,
-    pmHighRisk > 0
-      ? `${pmHighRisk} high/critical risk pattern${pmHighRisk > 1 ? 's' : ''} detected by YAML engine (FATF, Moody's, ICIJ methodologies)`
-      : `${patternMatches.length} pattern${patternMatches.length > 1 ? 's' : ''} detected — see sidebar for details`,
-    pmHighRisk > 0 ? 'critical' : 'warning');
+    `${patternMatches.length} structural pattern${patternMatches.length > 1 ? 's' : ''} matched against FATF/Moody's/ICIJ typologies: ${patternLinks}. ${pmHighRisk > 0 ? pmHighRisk + ' rated high/critical risk. ' : ''}${pmHighConf.length > 0 ? pmHighConf.length + ' with high confidence.' : ''}`,
+    pmHighRisk > 0 ? 'critical' : 'warning', 'ref-patterns');
 }
 
 // Narrative
 const narrative = document.getElementById('narrative');
-let narText = `<strong>${data.metadata.query}</strong> was searched across ${allSources.length} data sources: ICIJ Offshore Leaks, OpenSanctions${gleifCount ? ', GLEIF corporate registry' : ''}${secCount ? ', SEC EDGAR filings' : ''}${ukCount ? ', UK Companies House' : ''}${courtCount ? ', US court records' : ''}. `;
-
-if (crossLinked > 0) {
-  narText += `<span class="flag-cross">${crossLinked} entit${crossLinked > 1 ? 'ies appear' : 'y appears'} in both databases</span> — this is a significant finding indicating documented offshore holdings connected to sanctions or PEP exposure. `;
-}
-if (sanctionedCount > 0) {
-  narText += `<span class="flag-sanction">${sanctionedCount} sanctioned entit${sanctionedCount > 1 ? 'ies were' : 'y was'} identified</span>, meaning active designations on international sanctions lists. `;
-}
-if (pepCount > 0) {
-  narText += `<span class="flag-pep">${pepCount} politically exposed person${pepCount > 1 ? 's' : ''}</span> ${pepCount > 1 ? 'are' : 'is'} connected to the investigation subject. Under most AML/KYC frameworks, PEP connections require enhanced due diligence. `;
-}
-if (rcaCount > 0) {
-  narText += `${rcaCount} close associate${rcaCount > 1 ? 's' : ''} of PEPs ${rcaCount > 1 ? 'were' : 'was'} identified — RCA status typically extends the same due diligence requirements as direct PEP status. `;
-}
-if (investigations.length > 1) {
-  narText += `The subject appears across <strong>${investigations.length} separate leak investigations</strong> (${investigations.map(i => i.replace(/-/g, ' ')).join(', ')}), indicating a sustained offshore presence maintained over multiple years. `;
-}
-
-const jKeys = Object.keys(allCountries);
-if (jKeys.length > 2) {
-  narText += `The ${jKeys.length}-jurisdiction footprint (${jKeys.slice(0, 5).join(', ')}${jKeys.length > 5 ? '...' : ''}) suggests a multi-jurisdictional structure that may be designed for regulatory arbitrage or opacity. `;
-}
-
-if (patternMatches.length > 0) {
-  const critHigh = patternMatches.filter(p => p.risk === 'CRITICAL' || p.risk === 'HIGH');
-  if (critHigh.length > 0) {
-    narText += `<strong style="color:var(--sanction-color)">${critHigh.length} high-risk pattern${critHigh.length > 1 ? 's' : ''}</strong> detected: ${critHigh.map(p => p.title).join(', ')}. `;
-  }
-  const highConf = patternMatches.filter(p => p.confidence === 'high');
-  if (highConf.length > 0) {
-    narText += `<strong>${highConf.length} pattern${highConf.length > 1 ? 's' : ''} with high confidence</strong>: ${highConf.map(p => p.title).join(', ')}. `;
-  }
-  narText += `Patterns evaluated against FATF typologies, Moody's shell company indicators, and academic AML network analysis.`;
-}
 
 // Build headline finding
 let headline = '';
@@ -743,9 +918,77 @@ if (sanctionedCount > 0) {
   headline = `${nodes.length} entities found across ${allSources.length} databases`;
 }
 
+// Sources Searched section
+let sourcesText = `<strong>${data.metadata.query}</strong> was searched across ${allSources.length} data sources: ICIJ Offshore Leaks, OpenSanctions${gleifCount ? ', GLEIF corporate registry' : ''}${secCount ? ', SEC EDGAR filings' : ''}${ukCount ? ', UK Companies House' : ''}${courtCount ? ', US court records' : ''}${alephCount ? ', Aleph (OCCRP)' : ''}${wikidataCount ? ', Wikidata' : ''}${landCount ? ', Land Registry' : ''}. `;
+sourcesText += `${nodes.length} entities were discovered with ${edges.length} relationships mapped between them.`;
+
+// Key Findings section
+let findingsText = '';
+if (crossLinked > 0) {
+  findingsText += `<span class="flag-cross">${crossLinked} entit${crossLinked > 1 ? 'ies appear' : 'y appears'} in both databases</span> — this is a significant finding indicating documented offshore holdings connected to sanctions or PEP exposure. `;
+}
+if (sanctionedCount > 0) {
+  findingsText += `<span class="flag-sanction">${sanctionedCount} sanctioned entit${sanctionedCount > 1 ? 'ies were' : 'y was'} identified</span>, meaning active designations on international sanctions lists. `;
+}
+if (pepCount > 0) {
+  findingsText += `<span class="flag-pep">${pepCount} politically exposed person${pepCount > 1 ? 's' : ''}</span> ${pepCount > 1 ? 'are' : 'is'} connected to the investigation subject. Under most AML/KYC frameworks, PEP connections require enhanced due diligence. `;
+}
+if (rcaCount > 0) {
+  findingsText += `${rcaCount} close associate${rcaCount > 1 ? 's' : ''} of PEPs ${rcaCount > 1 ? 'were' : 'was'} identified — RCA status typically extends the same due diligence requirements as direct PEP status. `;
+}
+if (investigations.length > 1) {
+  findingsText += `The subject appears across <strong>${investigations.length} separate leak investigations</strong> (${investigations.map(i => i.replace(/-/g, ' ')).join(', ')}), indicating a sustained offshore presence maintained over multiple years. `;
+}
+if (jKeys.length > 2) {
+  findingsText += `The ${jKeys.length}-jurisdiction footprint (${jKeys.slice(0, 5).join(', ')}${jKeys.length > 5 ? '...' : ''}) suggests a multi-jurisdictional structure that may be designed for regulatory arbitrage or opacity. `;
+}
+if (!findingsText) findingsText = 'No high-priority risk indicators (sanctions, PEP, cross-references) were detected in this investigation.';
+
+// Pattern Analysis section
+let patternText = '';
+if (patternMatches.length > 0) {
+  const critHigh = patternMatches.filter(p => p.risk === 'CRITICAL' || p.risk === 'HIGH');
+  if (critHigh.length > 0) {
+    patternText += `<strong style="color:var(--sanction-color)">${critHigh.length} high-risk pattern${critHigh.length > 1 ? 's' : ''}</strong> detected: ${critHigh.map(p => `<a href="#" onclick="goToPattern('${p.pattern||p.title}');return false" style="color:var(--sanction-color);text-decoration:underline;cursor:pointer">${p.title}</a>`).join(', ')}. `;
+  }
+  const highConf = patternMatches.filter(p => p.confidence === 'high');
+  if (highConf.length > 0) {
+    patternText += `<strong>${highConf.length} pattern${highConf.length > 1 ? 's' : ''} with high confidence</strong>: ${highConf.map(p => p.title).join(', ')}. `;
+  }
+  patternText += `Patterns evaluated against FATF typologies, Moody's shell company indicators, and academic AML network analysis.`;
+} else {
+  patternText = 'No structural patterns were detected by the YAML pattern engine. This may indicate a simple structure or insufficient data for pattern matching.';
+}
+
+// Pattern callout box
+let patternCallout = '';
+if (patternMatches.length > 0) {
+  const riskColors = { CRITICAL: 'var(--sanction-color)', HIGH: '#f0883e', MEDIUM: 'var(--pep-color)', LOW: 'var(--text-muted)' };
+  patternCallout = '<div class="pattern-callout"><div class="callout-title">Detected Patterns</div>';
+  patternMatches.forEach(p => {
+    const rc = riskColors[p.risk] || 'var(--text-muted)';
+    patternCallout += `<div class="pattern-callout-item"><span style="color:${rc};font-weight:600">${p.risk}</span> — <strong style="color:var(--text)">${p.title}</strong>`;
+    if (p.evidence && p.evidence.length) patternCallout += `: ${p.evidence[0].length > 80 ? p.evidence[0].slice(0,78)+'...' : p.evidence[0]}`;
+    patternCallout += '</div>';
+  });
+  patternCallout += '</div>';
+}
+
 const summaryHtml = `
-  <div style="font-size:16px;font-weight:600;margin-bottom:10px;line-height:1.4">${headline}</div>
-  <div style="font-size:13px;color:var(--text-muted);line-height:1.7">${narText}</div>
+  <div style="font-size:16px;font-weight:600;margin-bottom:14px;line-height:1.4">${headline}</div>
+  <div class="narrative-subsection">
+    <h4>Sources Searched</h4>
+    <div style="font-size:13px;color:var(--text-muted);line-height:1.7">${sourcesText}</div>
+  </div>
+  <div class="narrative-subsection">
+    <h4>Key Findings</h4>
+    <div style="font-size:13px;color:var(--text-muted);line-height:1.7">${findingsText}</div>
+  </div>
+  <div class="narrative-subsection">
+    <h4>Pattern Analysis</h4>
+    <div style="font-size:13px;color:var(--text-muted);line-height:1.7">${patternText}</div>
+    ${patternCallout}
+  </div>
 `;
 narrative.innerHTML = summaryHtml;
 
@@ -762,6 +1005,9 @@ function nodeColor(d) {
   if (d.source === 'sec') return 'var(--sec-color)';
   if (d.source === 'companies_house') return 'var(--uk-color)';
   if (d.source === 'courtlistener') return 'var(--court-color)';
+  if (d.source === 'aleph') return 'var(--aleph-color)';
+  if (d.source === 'wikidata') return 'var(--wikidata-color)';
+  if (d.source === 'land_registry') return 'var(--land-color)';
   if (d.source === 'opensanctions') return 'var(--os-color)';
   return 'var(--icij-color)';
 }
@@ -796,6 +1042,9 @@ function contextNote(d) {
   if (d.source === 'sec') notes.push('Source: SEC EDGAR — US Securities and Exchange Commission filings. This entity appears in public company disclosures.');
   if (d.source === 'companies_house') notes.push('Source: UK Companies House — the official UK company registry. Includes Persons with Significant Control (PSC) beneficial ownership data.');
   if (d.source === 'courtlistener') notes.push('Source: CourtListener — US federal court records (PACER/RECAP). This entity is involved in documented litigation.');
+  if (d.source === 'aleph') notes.push('Source: Aleph (OCCRP) — investigative data platform aggregating corporate registries, court records, and datasets from multiple countries.');
+  if (d.source === 'wikidata') notes.push('Source: Wikidata — structured knowledge base from Wikimedia. Entity relationships and metadata from community-curated data.');
+  if (d.source === 'land_registry') notes.push('Source: Land Registry — property ownership records showing real estate holdings and beneficial ownership information.');
   if (d.sanctioned) notes.push('This entity is on one or more active sanctions lists. Transactions involving sanctioned entities may be prohibited under applicable law.');
   if (d.pep) notes.push('This person is classified as a Politically Exposed Person (PEP). Financial institutions are required to apply enhanced due diligence (EDD) to PEP-related transactions.');
   if ((d.topics || []).includes('role.rca')) notes.push('Close associate (RCA) of a politically exposed person. Under FATF guidance, RCA status typically triggers the same enhanced due diligence requirements as direct PEP status.');
@@ -926,13 +1175,14 @@ function showDetail(d) {
   const sourceLabels = {
     'both': 'Multiple Sources', 'icij': 'ICIJ', 'opensanctions': 'OpenSanctions',
     'gleif': 'GLEIF', 'sec': 'SEC EDGAR', 'companies_house': 'UK Companies House',
-    'courtlistener': 'CourtListener',
+    'courtlistener': 'CourtListener', 'aleph': 'Aleph', 'wikidata': 'Wikidata',
+    'land_registry': 'Land Registry',
   };
   const srcLabel = sourceLabels[d.source] || d.source;
   const srcClass = d.source === 'both' ? 'both-tag' : d.source === 'icij' ? 'icij' : 'os';
   tags += `<span class="tag ${srcClass}" style="color:${nodeColor(d)}">${srcLabel}</span> `;
-  if (d.sanctioned) tags += '<span class="tag sanction">Sanctioned</span> ';
-  if (d.pep) tags += '<span class="tag pep">PEP</span> ';
+  if (d.sanctioned) tags += '<span class="tag sanction" style="cursor:pointer" onclick="goToRef(&quot;ref-sanctioned&quot;)">Sanctioned</span> ';
+  if (d.pep) tags += '<span class="tag pep" style="cursor:pointer" onclick="goToRef(&quot;ref-pep&quot;)">PEP</span> ';
   if ((d.topics||[]).includes('role.rca')) tags += '<span class="tag rca">Close Associate</span> ';
 
   let rows = '';
@@ -1007,6 +1257,7 @@ jSorted.forEach(([code,count]) => {
   const div = document.createElement('div');
   div.className = 'jurisdiction-bar';
   div.innerHTML = `<span class="code">${code}</span><div class="bar" style="width:${bw}px;background:var(--icij-color)"></div><span class="count">${count}</span>`;
+  div.title = `${code}: ${count} entit${count > 1 ? 'ies' : 'y'} registered or connected to this jurisdiction. Click to highlight in the network graph.`;
   div.addEventListener('click', () => {
     node.select('circle,rect').attr('opacity', d => {
       const c=[...(d.country_codes||[])]; if(d.jurisdiction) c.push(d.jurisdiction);
@@ -1039,35 +1290,450 @@ if (patternMatches.length) {
   const riskColors = { CRITICAL: 'var(--sanction-color)', HIGH: '#f0883e', MEDIUM: 'var(--pep-color)', LOW: 'var(--text-muted)' };
   const confLabels = { high: 'HIGH', medium: 'MED', low: 'LOW' };
 
-  patternMatches.forEach(p => {
+  patternMatches.forEach((p, idx) => {
     const card = document.createElement('div');
     card.className = 'pattern-card';
     const riskColor = riskColors[p.risk] || 'var(--text-muted)';
     const confBadge = `<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:${riskColor};color:var(--bg);font-weight:700;margin-left:6px">${p.risk}</span>`;
     const confText = `<span style="font-size:10px;color:var(--text-dim);margin-left:4px">${confLabels[p.confidence] || p.confidence} confidence</span>`;
 
-    let evidenceHtml = '';
-    if (p.evidence && p.evidence.length) {
-      evidenceHtml = '<div style="margin-top:6px;font-size:10px;color:var(--text-dim)">' +
-        p.evidence.slice(0, 2).map(e => `<div style="margin-top:2px">• ${e.length > 70 ? e.slice(0,68) + '...' : e}</div>`).join('') +
-        '</div>';
-    }
+    // Description from YAML pattern definition
+    const descHtml = p.description
+      ? `<div class="pattern-desc">${p.description}</div>`
+      : '';
 
+    // Conditions met/missed
     let condHtml = '';
     if (p.conditions_met && p.conditions_met.length) {
-      condHtml = `<div style="margin-top:4px;font-size:10px"><span style="color:var(--accent-green)">✓ ${p.conditions_met.join(', ')}</span>`;
+      condHtml = `<div style="margin-top:6px;font-size:10px"><span style="color:var(--accent-green)">✓ ${p.conditions_met.join(', ')}</span>`;
       if (p.conditions_missed && p.conditions_missed.length) {
         condHtml += ` <span style="color:var(--text-dim)">✗ ${p.conditions_missed.join(', ')}</span>`;
       }
       condHtml += '</div>';
     }
 
-    card.innerHTML = `<div class="pattern-name">${p.title}${confBadge}${confText}</div>${condHtml}${evidenceHtml}`;
+    // Evidence (expandable)
+    let evidenceHtml = '';
+    if (p.evidence && p.evidence.length) {
+      evidenceHtml = '<div style="font-size:10px;color:var(--text-dim);margin-top:4px">' +
+        p.evidence.map(e => `<div style="margin-top:2px">• ${e.length > 80 ? e.slice(0,78) + '...' : e}</div>`).join('') +
+        '</div>';
+    }
+
+    const detailId = `pattern-detail-${idx}`;
+    card.innerHTML = `
+      <div class="pattern-name" style="cursor:pointer" onclick="goToPattern('${p.pattern || p.title}')" title="Click to see full pattern details">${p.title}${confBadge}${confText}</div>
+      ${descHtml}${condHtml}
+      <div class="pattern-expand" onclick="document.getElementById('${detailId}').classList.toggle('open');this.textContent=this.textContent==='▸ Evidence'?'▾ Evidence':'▸ Evidence'">▸ Evidence</div>
+      <div class="pattern-detail" id="${detailId}">${evidenceHtml}</div>
+    `;
     patternDiv.appendChild(card);
   });
 } else {
   patternDiv.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">No structural patterns detected</div>';
 }
+
+// ============================================================
+// PATTERNS TAB (full-page pattern detail view)
+// ============================================================
+function goToRef(anchorId) {
+  // Switch to Reference tab and scroll to the given anchor
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  const btn = document.querySelector('.tab-btn[data-tab="patterns"]');
+  if (btn) btn.classList.add('active');
+  const tab = document.getElementById('tab-patterns');
+  if (tab) tab.classList.add('active');
+  setTimeout(() => {
+    const el = document.getElementById(anchorId);
+    if (el) {
+      const headerH = document.querySelector('.header') ? document.querySelector('.header').offsetHeight : 0;
+      const tabBarH = document.querySelector('.tab-bar') ? document.querySelector('.tab-bar').offsetHeight : 0;
+      const offset = headerH + tabBarH + 16;
+      const y = el.getBoundingClientRect().top + window.scrollY - offset;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+  }, 100);
+}
+function goToPattern(patternName) {
+  goToRef('pat-' + patternName.replace(/[^a-z0-9]/gi, '-').toLowerCase());
+}
+
+(function buildPatternsTab() {
+  const container = document.getElementById('patternTabContent');
+  if (!container) return;
+  const riskColors = { CRITICAL: 'var(--sanction-color)', HIGH: '#f0883e', MEDIUM: 'var(--pep-color)', LOW: 'var(--text-muted)' };
+  const riskOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+  if (!patternMatches.length) {
+    container.innerHTML = '<div style="padding:40px;color:var(--text-dim);font-size:13px">No structural patterns were detected in this investigation. Patterns are matched against FATF typologies, Moody\'s shell company indicators, and ICIJ investigative methodologies.</div>';
+    return;
+  }
+
+  // Sort by risk (critical first) then confidence
+  const sorted = [...patternMatches].sort((a, b) => {
+    const rd = (riskOrder[a.risk] || 3) - (riskOrder[b.risk] || 3);
+    if (rd !== 0) return rd;
+    const confOrder = { high: 0, medium: 1, low: 2 };
+    return (confOrder[a.confidence] || 2) - (confOrder[b.confidence] || 2);
+  });
+
+  let html = '';
+  sorted.forEach(p => {
+    const rc = riskColors[p.risk] || 'var(--text-muted)';
+    const anchorId = 'pat-' + (p.pattern || p.title).replace(/[^a-z0-9]/gi, '-').toLowerCase();
+    const confLabel = { high: 'HIGH', medium: 'MEDIUM', low: 'LOW' }[p.confidence] || p.confidence;
+
+    html += `<div id="${anchorId}" style="background:var(--bg);border:1px solid var(--border);border-left:4px solid ${rc};border-radius:6px;padding:16px 20px;margin-bottom:12px">`;
+    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">`;
+    html += `<span style="font-size:15px;font-weight:600;color:var(--text)">${p.title}</span>`;
+    html += `<span style="font-size:10px;padding:2px 8px;border-radius:3px;background:${rc};color:var(--bg);font-weight:700">${p.risk}</span>`;
+    html += `<span style="font-size:11px;color:var(--text-dim)">${confLabel} confidence</span>`;
+    html += `</div>`;
+
+    if (p.description) {
+      html += `<div style="font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:10px">${p.description}</div>`;
+    }
+
+    // Provenance — references with links, sources, status
+    const refs = p.references || [];
+    const srcNames = (p.sources || []).map(s => s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+    const status = p.status || '';
+
+    html += '<div style="font-size:11px;margin-bottom:8px;padding:8px 10px;background:rgba(88,166,255,0.05);border-radius:4px;border-left:3px solid var(--icij-color)">';
+
+    // References with clickable links
+    if (refs.length) {
+      html += '<div style="color:var(--text-muted);margin-bottom:4px"><strong style="color:var(--text-dim)">Sources:</strong></div>';
+      refs.forEach(r => {
+        if (r.url) {
+          html += `<div style="margin-left:8px;margin-bottom:2px"><a href="${r.url}" target="_blank" rel="noopener" style="color:var(--icij-color);text-decoration:none">${r.title || r.url}</a> ↗</div>`;
+        } else if (r.title) {
+          html += `<div style="margin-left:8px;margin-bottom:2px;color:var(--text-muted)">${r.title}</div>`;
+        }
+      });
+    } else if (srcNames.length) {
+      // Fallback: show source identifiers without links
+      html += `<div style="color:var(--text-muted)"><strong style="color:var(--text-dim)">Derived from:</strong> ${srcNames.join(' · ')}</div>`;
+    }
+
+    if (status) {
+      const statusColors = { ESTABLISHED: 'var(--accent-green)', CONFIRMED: 'var(--icij-color)', PROPOSED: 'var(--pep-color)' };
+      const statusDescs = { ESTABLISHED: 'Observed across multiple leak datasets or sources', CONFIRMED: 'Observed in 2+ independent investigations', PROPOSED: 'Identified in a single investigation, not yet confirmed' };
+      html += `<div style="color:var(--text-muted);margin-top:4px"><strong style="color:var(--text-dim)">Status:</strong> <span style="color:${statusColors[status] || 'var(--text-dim)'}">${status}</span> — ${statusDescs[status] || ''}</div>`;
+    }
+    html += '</div>';
+
+    // Conditions
+    if (p.conditions_met && p.conditions_met.length) {
+      html += '<div style="font-size:12px;margin-bottom:8px">';
+      html += '<span style="color:var(--text-dim);font-weight:600">Conditions: </span>';
+      p.conditions_met.forEach(c => {
+        html += `<span style="color:var(--accent-green);margin-right:8px">✓ ${c.replace(/_/g, ' ')}</span>`;
+      });
+      if (p.conditions_missed && p.conditions_missed.length) {
+        p.conditions_missed.forEach(c => {
+          html += `<span style="color:var(--text-dim);margin-right:8px">✗ ${c.replace(/_/g, ' ')}</span>`;
+        });
+      }
+      html += '</div>';
+    }
+
+    // Evidence
+    if (p.evidence && p.evidence.length) {
+      html += '<div style="font-size:12px;color:var(--text-dim);line-height:1.5">';
+      html += '<span style="color:var(--text-dim);font-weight:600">Evidence:</span>';
+      p.evidence.forEach(e => {
+        html += `<div style="margin-top:3px;padding-left:12px">• ${e}</div>`;
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+  });
+
+  container.innerHTML = html;
+})();
+
+// ============================================================
+// REFERENCE: Risk Levels
+// ============================================================
+(function buildRefRisk() {
+  const el = document.getElementById('refRiskContent');
+  if (!el) return;
+  const levels = [
+    { level: 'CRITICAL', color: 'var(--sanction-color)', desc: 'Active sanctions designations, direct links to sanctioned entities within 1-2 hops, or confirmed sanctions evasion structures. Requires immediate legal/compliance review.' },
+    { level: 'HIGH', color: '#f0883e', desc: 'Multiple structural red flags: cross-source corroboration (entity in 3+ databases), high-betweenness chokepoint nodes, scatter-gather layering patterns, or PEP opacity layers. Warrants enhanced due diligence.' },
+    { level: 'MEDIUM', color: 'var(--pep-color)', desc: 'Single structural indicators: PEP connections, shell company characteristics (Moody\'s factors), temporal clustering, or beneficial ownership gaps. Standard due diligence with monitoring.' },
+    { level: 'LOW', color: 'var(--text-muted)', desc: 'Minimal indicators. Entity appears in databases but without sanctions, PEP, or structural flags. Routine monitoring appropriate.' },
+  ];
+  el.innerHTML = levels.map(l =>
+    `<div id="ref-risk-${l.level.toLowerCase()}" style="display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;padding:10px 14px;background:var(--bg);border-radius:6px;border-left:4px solid ${l.color}">
+      <span style="font-size:11px;padding:2px 8px;border-radius:3px;background:${l.color};color:var(--bg);font-weight:700;flex-shrink:0">${l.level}</span>
+      <span style="font-size:12px;color:var(--text-muted);line-height:1.6">${l.desc}</span>
+    </div>`
+  ).join('');
+})();
+
+// ============================================================
+// REFERENCE: Designations (PEP, Sanctions, RCA)
+// ============================================================
+(function buildRefDesignations() {
+  const el = document.getElementById('refDesignationsContent');
+  if (!el) return;
+  const items = [
+    { id: 'ref-sanctioned', tag: 'SANCTIONED', color: 'var(--sanction-color)', title: 'Sanctioned Entity',
+      desc: 'Entity appearing on one or more international sanctions lists (OFAC SDN, EU Consolidated, UK FCDO, UN Security Council, etc.). Active designations impose legal restrictions: financial institutions must freeze assets, block transactions, and report. Dealing with a sanctioned entity — even unknowingly — can result in criminal penalties.',
+      found: sanctionedCount },
+    { id: 'ref-pep', tag: 'PEP', color: 'var(--pep-color)', title: 'Politically Exposed Person',
+      desc: 'Current or former senior government official, their family members, or close associates. PEP status does not imply wrongdoing — it indicates elevated corruption risk due to the person\'s position of influence. Under FATF recommendations and most AML regulations, PEP relationships require Enhanced Due Diligence (EDD): source-of-wealth verification, senior management approval, and ongoing monitoring.',
+      found: pepCount },
+    { id: 'ref-rca', tag: 'RCA', color: 'var(--rca-color)', title: 'Relative or Close Associate',
+      desc: 'A person with a close personal or professional relationship to a PEP — family members, business partners, legal advisors, or anyone who could benefit from the PEP\'s position. RCA status typically triggers the same Enhanced Due Diligence requirements as direct PEP status, because PEPs frequently channel funds through associates to distance themselves from transactions.',
+      found: rcaCount },
+    { id: 'ref-cross-linked', tag: 'CROSS-LINKED', color: 'var(--both-color)', title: 'Cross-Source Corroboration',
+      desc: 'Entity appearing in multiple independent databases (e.g., both ICIJ Offshore Leaks and OpenSanctions). Cross-source matches are the highest-value investigative findings because independent databases corroborate each other — reducing the likelihood of false-positive name matches and strengthening the evidentiary basis.',
+      found: crossLinked },
+  ];
+  el.innerHTML = items.map(it =>
+    `<div id="${it.id}" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px 18px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span class="tag" style="background:${it.color}22;color:${it.color};font-size:10px;padding:2px 6px;border-radius:10px;font-weight:600">${it.tag}</span>
+        <span style="font-size:14px;font-weight:600;color:var(--text)">${it.title}</span>
+        ${it.found > 0 ? `<span style="font-size:11px;color:${it.color};font-weight:600">${it.found} found in this investigation</span>` : ''}
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);line-height:1.6">${it.desc}</div>
+    </div>`
+  ).join('');
+})();
+
+// ============================================================
+// REFERENCE: Data Sources
+// ============================================================
+(function buildRefSources() {
+  const el = document.getElementById('refSourcesContent');
+  if (!el) return;
+  const sources = [
+    { id: 'ref-src-icij', name: 'ICIJ Offshore Leaks', color: 'var(--icij-color)', count: icijCount,
+      desc: 'Database of 810,000+ entities from 5 major leak investigations: Panama Papers (Mossack Fonseca, 2016), Paradise Papers (Appleby, 2017), Pandora Papers (14 firms, 2021), Bahamas Leaks (2016), and Offshore Leaks (2013). Contains shell companies, officers, intermediaries (law firms/agents), and registered addresses. Appearing here does not indicate illegality — but it documents offshore financial structures.' },
+    { id: 'ref-src-opensanctions', name: 'OpenSanctions', color: 'var(--os-color)', count: osCount,
+      desc: 'Aggregation of 320+ sanctions lists, PEP databases, and enforcement records from governments worldwide. Includes OFAC SDN (US), EU Consolidated List, UK FCDO, UN Security Council, plus PEP databases from dozens of countries. Provides structured matching with confidence scores.' },
+    { id: 'ref-src-gleif', name: 'GLEIF LEI Registry', color: 'var(--gleif-color)', count: gleifCount,
+      desc: 'Global Legal Entity Identifier registry. LEIs are 20-character codes that uniquely identify companies in financial transactions. GLEIF also maps corporate ownership chains (direct parent, ultimate parent, subsidiaries). Useful for entity resolution and tracing corporate structures. Not all companies have LEIs — coverage skews toward financial institutions and large corporations.' },
+    { id: 'ref-src-sec', name: 'SEC EDGAR', color: 'var(--sec-color)', count: secCount,
+      desc: 'US Securities and Exchange Commission electronic filing system. Contains 10-K (annual), 10-Q (quarterly), 8-K (current event), and proxy filings for all US public companies. Also contains enforcement actions, insider trading reports, and beneficial ownership disclosures (Schedule 13D/13G). No API key required.' },
+    { id: 'ref-src-ch', name: 'UK Companies House', color: 'var(--uk-color)', count: ukCount,
+      desc: 'Official UK company registry. Contains company profiles, officer/director listings, and Persons with Significant Control (PSC) — the UK\'s beneficial ownership register. PSC data shows who ultimately owns or controls a company (25%+ shareholding, voting rights, or right to appoint/remove directors). Critical for tracing UK-registered vehicles in offshore structures.' },
+    { id: 'ref-src-court', name: 'CourtListener', color: 'var(--court-color)', count: courtCount,
+      desc: 'US federal court records via the PACER/RECAP system. Contains docket entries, opinions, and case metadata from federal district and appellate courts. Useful for identifying litigation history, enforcement actions, and civil/criminal proceedings connected to investigation subjects.' },
+    { id: 'ref-src-aleph', name: 'OCCRP Aleph', color: 'var(--aleph-color, #e0a040)', count: alephCount,
+      desc: 'Investigative data platform operated by the Organized Crime and Corruption Reporting Project. Aggregates company records, court filings, leaked documents, and investigative datasets from dozens of countries. Contains source documents from many of the same leaks as ICIJ, plus additional regional datasets. Requires API key for full access.' },
+    { id: 'ref-src-wikidata', name: 'Wikidata', color: 'var(--wikidata-color, #06b6d4)', count: wikidataCount,
+      desc: 'Structured knowledge base with data on millions of people, organizations, and places. Provides disambiguating facts (date of birth, nationality, employer, political positions) that confirm or rule out name matches across other sources. Also tracks political positions with start/end dates, catching lower-profile officials and historical roles not covered by sanctions lists.' },
+  ];
+  el.innerHTML = sources.map(s =>
+    `<div id="${s.id}" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin-bottom:8px;border-left:4px solid ${s.color}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-size:13px;font-weight:600;color:var(--text)">${s.name}</span>
+        ${s.count > 0 ? `<span style="font-size:11px;color:${s.color};font-weight:600">${s.count} entities found</span>` : `<span style="font-size:11px;color:var(--text-dim)">no matches</span>`}
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);line-height:1.6">${s.desc}</div>
+    </div>`
+  ).join('');
+})();
+
+// ============================================================
+// REFERENCE: Jurisdictions
+// ============================================================
+(function buildRefJurisdictions() {
+  const el = document.getElementById('refJurisdictionsContent');
+  if (!el) return;
+  // Known jurisdiction metadata
+  const jurInfo = {
+    PA: { name: 'Panama', note: 'Major offshore hub. Home of Mossack Fonseca (Panama Papers). Bearer share companies were legal until 2015. Financial Secrecy Index: top 20.' },
+    VG: { name: 'British Virgin Islands', note: 'Most popular jurisdiction for offshore shell companies. Over 400,000 active companies for a population of 30,000. Featured in all 5 ICIJ leaks.' },
+    KY: { name: 'Cayman Islands', note: 'Largest offshore financial centre by assets under management. Major hedge fund domicile. No direct taxation.' },
+    BZ: { name: 'Belize', note: 'Offshore jurisdiction offering International Business Companies (IBCs) with strong secrecy provisions and no public beneficial ownership registry.' },
+    SC: { name: 'Seychelles', note: 'Offshore financial centre offering IBCs and foundations with strong privacy protections. Growing hub for cryptocurrency-related entities.' },
+    HK: { name: 'Hong Kong', note: 'Major Asian financial centre. Gateway between mainland China and international finance. Companies House equivalent has limited beneficial ownership disclosure.' },
+    SG: { name: 'Singapore', note: 'Asian financial hub. Variable Capital Companies (VCCs) popular for fund structures. Increasingly used as intermediate holding jurisdiction.' },
+    JE: { name: 'Jersey', note: 'Crown dependency. Major trust jurisdiction. Financial services account for ~40% of GDP.' },
+    GG: { name: 'Guernsey', note: 'Crown dependency. Specialist insurance and fund administration jurisdiction.' },
+    IM: { name: 'Isle of Man', note: 'Crown dependency. Corporate structures popular for holding intellectual property and aircraft registration.' },
+    CY: { name: 'Cyprus', note: 'EU member state frequently used as holding company jurisdiction for Eastern European and Russian investments. Tax treaty network and EU passporting.' },
+    MT: { name: 'Malta', note: 'EU member state. Paradise Papers revealed extensive use of Malta corporate structures. Gaming and fintech hub.' },
+    LU: { name: 'Luxembourg', note: 'EU founding member. Largest securitisation hub in Europe. Holding company regime (SOPARFI) widely used for multinational structures.' },
+    LI: { name: 'Liechtenstein', note: 'Foundations and trusts with strong banking secrecy. Financial centre disproportionate to population of 39,000.' },
+    CH: { name: 'Switzerland', note: 'Historic banking secrecy jurisdiction. Automatic exchange of information now in place but trust structures remain complex.' },
+    GB: { name: 'United Kingdom', note: 'London as financial centre. Scottish Limited Partnerships (SLPs) identified as money laundering vehicles. Register of Overseas Entities now requires disclosure.' },
+    US: { name: 'United States', note: 'Delaware, Nevada, Wyoming, and South Dakota offer strong corporate privacy. No federal beneficial ownership registry until CTA (2024). Major destination for international financial flows.' },
+    AO: { name: 'Angola', note: 'Oil-rich nation. Subject of the Luanda Leaks investigation. Isabel dos Santos and associates identified as extracting billions through offshore structures connected to state-owned enterprises.' },
+    BR: { name: 'Brazil', note: 'Largest Latin American economy. Petrobras corruption scandal (Lava Jato/Car Wash) revealed extensive offshore structures used by Brazilian politicians and executives.' },
+    PT: { name: 'Portugal', note: 'Historical ties to Angola and Mozambique. Portuguese-speaking financial corridor linking Lusophone Africa to European financial system.' },
+    ES: { name: 'Spain', note: 'Major European economy. Gateway between European and Latin American financial systems.' },
+    RU: { name: 'Russia', note: 'Subject of extensive sanctions regimes since 2014 (Crimea) and 2022 (Ukraine). Russian oligarch structures frequently feature BVI/Cyprus/UK holding companies.' },
+    CN: { name: 'China', note: 'Capital controls drive use of offshore structures for outward investment. Hong Kong typically serves as intermediate jurisdiction.' },
+    AE: { name: 'United Arab Emirates', note: 'Dubai International Financial Centre (DIFC) and Abu Dhabi Global Market (ADGM). Growing hub for wealth management and fintech. FATF grey list until 2024.' },
+  };
+  const sorted = Object.entries(allCountries).sort((a, b) => b[1] - a[1]);
+  if (!sorted.length) { el.innerHTML = '<div style="color:var(--text-dim);font-size:12px">No jurisdiction data available.</div>'; return; }
+  el.innerHTML = sorted.map(([code, count]) => {
+    const info = jurInfo[code] || {};
+    const name = info.name || code;
+    const note = info.note || 'No additional context available for this jurisdiction.';
+    return `<div id="ref-jur-${code.toLowerCase()}" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:6px;display:flex;gap:12px;align-items:flex-start">
+      <span style="font-size:14px;font-weight:700;color:var(--icij-color);min-width:32px">${code}</span>
+      <div>
+        <span style="font-size:13px;font-weight:600;color:var(--text)">${name}</span>
+        <span style="font-size:11px;color:var(--text-dim);margin-left:6px">${count} entit${count > 1 ? 'ies' : 'y'}</span>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:2px">${note}</div>
+      </div>
+    </div>`;
+  }).join('');
+})();
+
+// ============================================================
+// REFERENCE: Visual Legend
+// ============================================================
+(function buildRefLegend() {
+  const el = document.getElementById('refLegendContent');
+  if (!el) return;
+  const items = [
+    { type: 'color', label: 'ICIJ Offshore Leaks', color: 'var(--icij-color)', shape: 'circle', desc: 'Entity from the ICIJ Offshore Leaks database (Panama Papers, Paradise Papers, etc.)' },
+    { type: 'color', label: 'OpenSanctions', color: 'var(--os-color)', shape: 'circle', desc: 'Entity from OpenSanctions (sanctions lists, PEP databases, enforcement records)' },
+    { type: 'color', label: 'Multiple Sources', color: 'var(--both-color)', shape: 'circle', desc: 'Entity found in both ICIJ and OpenSanctions — cross-referenced across independent databases' },
+    { type: 'color', label: 'GLEIF', color: 'var(--gleif-color)', shape: 'circle', desc: 'Entity from the GLEIF LEI Registry (corporate identifiers and ownership chains)' },
+    { type: 'color', label: 'SEC EDGAR', color: 'var(--sec-color)', shape: 'circle', desc: 'Entity from SEC EDGAR (US public company filings)' },
+    { type: 'color', label: 'UK Companies House', color: 'var(--uk-color)', shape: 'circle', desc: 'Entity from UK Companies House (company registry, officers, PSC)' },
+    { type: 'color', label: 'CourtListener', color: 'var(--court-color)', shape: 'circle', desc: 'Entity from CourtListener (US federal court records)' },
+    { type: 'border', label: 'Sanctioned entity', color: 'var(--sanction-color)', desc: 'Red border / dashed stroke indicates entity is on an active sanctions list' },
+    { type: 'border', label: 'PEP connection', color: 'var(--pep-color)', desc: 'Yellow border indicates connection to a Politically Exposed Person' },
+    { type: 'shape', label: 'Circle — Person / Officer', shape: 'circle', desc: 'Round nodes represent people (officers, directors, beneficial owners, PEPs)' },
+    { type: 'shape', label: 'Square — Entity / Company', shape: 'rect', desc: 'Square nodes represent companies, legal entities, or organizations' },
+    { type: 'shape', label: 'Diamond — Intermediary', shape: 'diamond', desc: 'Diamond nodes represent intermediaries (law firms, registered agents, formation agents)' },
+    { type: 'size', label: 'Node size — connection count', desc: 'Larger nodes have more connections (higher degree). Hub nodes with many connections may be intermediaries or chokepoints.' },
+    { type: 'size', label: 'Node opacity — hop distance', desc: 'Brighter nodes are closer to the search subject (hop 0). Dimmer nodes are further away (hop 1, 2). Direct matches are most prominent.' },
+  ];
+  el.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${items.map(it => {
+    let swatch = '';
+    if (it.type === 'color' || it.type === 'border') {
+      const bg = it.type === 'border' ? 'transparent' : it.color;
+      const border = it.type === 'border' ? `2px solid ${it.color}` : 'none';
+      swatch = `<div style="width:14px;height:14px;border-radius:50%;background:${bg};border:${border};flex-shrink:0"></div>`;
+    } else if (it.type === 'shape') {
+      if (it.shape === 'rect') swatch = `<div style="width:12px;height:12px;background:var(--icij-color);border-radius:2px;flex-shrink:0"></div>`;
+      else if (it.shape === 'diamond') swatch = `<div style="width:10px;height:10px;background:var(--icij-color);transform:rotate(45deg);flex-shrink:0"></div>`;
+      else swatch = `<div style="width:14px;height:14px;border-radius:50%;background:var(--icij-color);flex-shrink:0"></div>`;
+    } else {
+      swatch = `<div style="width:14px;height:14px;flex-shrink:0"></div>`;
+    }
+    return `<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 10px;background:var(--bg);border-radius:4px">
+      ${swatch}
+      <div><div style="font-size:12px;font-weight:600;color:var(--text)">${it.label}</div>
+      <div style="font-size:11px;color:var(--text-muted);line-height:1.4">${it.desc}</div></div>
+    </div>`;
+  }).join('')}</div>`;
+})();
+
+// ============================================================
+// REFERENCE: Network Depth
+// ============================================================
+(function buildRefNetworkDepth() {
+  const el = document.getElementById('refNetworkDepthContent');
+  if (!el) return;
+  const hops = [
+    { hop: 0, title: 'Hop 0 — Direct Matches',
+      desc: 'Entities that directly matched the search name across all databases. These are the seed results: the subject themselves, their companies, addresses, court cases, and sanctions entries. High confidence that these relate to the investigation subject.' },
+    { hop: 1, title: 'Hop 1 — Direct Connections',
+      desc: 'Entities connected to hop-0 results by one relationship step. Includes: officers of the same company, corporate parents and subsidiaries, related sanctions entries, persons with significant control (PSC), and cross-source bridges (e.g., an ICIJ entity matched to an OpenSanctions record by name). These are the subject\'s immediate network.' },
+    { hop: 2, title: 'Hop 2 — Second-Degree Connections',
+      desc: 'Entities two steps removed. Shared intermediaries, co-officers of connected companies, and entities discovered through cross-source bridging. Lower confidence of direct relevance, but critical for revealing the wider structure — many offshore arrangements are designed to put 2-3 layers between the beneficial owner and the assets.' },
+    { hop: 3, title: 'Hop 3 — Third-Degree Connections',
+      desc: 'The outer perimeter of the network. Entities three relationship steps from the subject. Useful for identifying systemic patterns (formation agent networks, jurisdiction clusters) but individual connections require careful verification. Budget and fanout limits typically constrain the graph at this depth.' },
+  ];
+  el.innerHTML = `
+    <div style="font-size:12px;color:var(--text-muted);line-height:1.6;margin-bottom:14px">
+      Sift builds the investigation network using breadth-first traversal: starting from the search name, it expands outward one "hop" at a time, querying each database for connected entities. Deeper hops reveal indirect connections but with decreasing confidence.
+    </div>
+    ${hops.filter(h => h.hop <= maxHop + 1).map(h => {
+      const cnt = nodes.filter(n => (n.hop||0) === h.hop).length;
+      const active = h.hop <= maxHop;
+      return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin-bottom:8px;opacity:${active ? 1 : 0.5}">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${h.title}${active ? ` <span style="font-size:11px;color:var(--icij-color);font-weight:400">${cnt} entities</span>` : ' <span style="font-size:11px;color:var(--text-dim)">(not reached)</span>'}</div>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.6;margin-top:4px">${h.desc}</div>
+      </div>`;
+    }).join('')}
+    <div style="font-size:12px;color:var(--text-muted);line-height:1.6;margin-top:10px">
+      <strong>Why depth matters:</strong> Sanctioned or PEP entities found at deeper hops indicate indirect exposure — the subject is connected to flagged individuals through intermediary structures. This is often by design: offshore arrangements use layered entities to distance beneficial owners from assets. A sanctioned entity at hop 2 means the subject is two corporate relationships away from someone on a sanctions list.
+    </div>
+  `;
+})();
+
+// ============================================================
+// REFERENCE: Confidence & Risk Scoring
+// ============================================================
+(function buildRefScoring() {
+  const el = document.getElementById('refScoringContent');
+  if (!el) return;
+  el.innerHTML = `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px 18px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Confidence Score (0-100%)</div>
+      <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
+        Measures how likely a database match refers to the actual investigation subject (vs. a coincidental name match).
+        Factors: name similarity score from the source API, number of hops from the seed query (closer = higher),
+        presence in multiple independent sources (cross-corroboration), and specificity of identifying information
+        (e.g., matching nationality or date of birth). A 90%+ confidence match with sanctions exposure is actionable;
+        a 30% match on a common name requires manual verification.
+      </div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px 18px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Risk Score (0-100)</div>
+      <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
+        Composite risk assessment combining: sanctions status (highest weight), PEP/RCA designation,
+        number of structural pattern matches, jurisdiction risk profile (secrecy jurisdictions score higher),
+        network position (chokepoint nodes score higher), and cross-source corroboration.
+        Scores map to levels: CRITICAL (70+), HIGH (50-69), MEDIUM (25-49), LOW (0-24).
+      </div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px 18px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Pattern Confidence (HIGH / MEDIUM / LOW)</div>
+      <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
+        Indicates how many of a pattern's detection conditions were met.
+        <strong>HIGH</strong>: all conditions met — strong structural evidence.
+        <strong>MEDIUM</strong>: most conditions met but some data gaps.
+        <strong>LOW</strong>: minimum threshold met but significant conditions missing — may be a partial match or
+        an artifact of incomplete data. Low-confidence patterns should be treated as hypotheses requiring further investigation.
+      </div>
+    </div>
+  `;
+})();
+
+// ============================================================
+// REFERENCE: Recommended Next Steps (from investigation skill)
+// ============================================================
+(function buildRefNextSteps() {
+  const el = document.getElementById('refNextStepsContent');
+  if (!el) return;
+  const steps = data.next_steps || [];
+  const priorityColors = { CRITICAL: 'var(--sanction-color)', HIGH: '#f0883e', RECOMMENDED: 'var(--icij-color)', ONGOING: 'var(--text-muted)' };
+
+  if (!steps.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:12px">No next steps provided. The investigation skill generates tailored recommendations when run via <code>/investigate</code>.</div>';
+    return;
+  }
+
+  el.innerHTML = steps.map(s => {
+    const color = priorityColors[s.priority] || priorityColors[s.level] || 'var(--icij-color)';
+    const label = s.priority || s.level || '';
+    return `<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px;padding:10px 14px;background:var(--bg);border-radius:6px;border-left:4px solid ${color}">
+      ${label ? `<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:${color};color:var(--bg);font-weight:700;flex-shrink:0;margin-top:2px">${label}</span>` : ''}
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${s.title || ''}</div>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.6">${s.description || s.desc || ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+})();
 
 // ============================================================
 // JURISDICTION FLOW (Bipartite: Persons -> Jurisdictions)
@@ -1112,7 +1778,7 @@ if (patternMatches.length) {
 
   if (leftNames.length === 0 || allJur.length === 0) {
     // Pure fallback: horizontal bar chart of jurisdictions
-    const margin = {top:20,right:100,bottom:20,left:60};
+    const margin = {top:20,right:100,bottom:20,left:120};
     const sorted = Object.entries(allCountries).sort((a,b)=>b[1]-a[1]);
     const chartH = Math.max(200, sorted.length * 36);
     flowSvg.attr('height', chartH + margin.top + margin.bottom);
@@ -1355,15 +2021,11 @@ if (patternMatches.length) {
         findings.innerHTML = 'No temporal clustering detected. Entity formations appear to be distributed over time rather than concentrated in bursts.';
       }
     }
-  } else {
-    g.append('text').attr('x',innerW/2).attr('y',innerH/2)
-      .attr('text-anchor','middle').attr('fill','var(--text-muted)').attr('font-size','13px')
-      .text('No incorporation dates available in the current dataset');
-    g.append('text').attr('x',innerW/2).attr('y',innerH/2+20)
-      .attr('text-anchor','middle').attr('fill','var(--text-dim)').attr('font-size','11px')
-      .text('ICIJ entity data does not always include formation dates. Use icij_extend to request them.');
-    document.getElementById('temporalFindings').innerHTML = 'Temporal analysis requires incorporation dates. Use <code>icij_extend</code> with the <code>incorporation_date</code> property to retrieve dates for specific entities.';
+    // Show sections since we have data
+    document.getElementById('incorporationSection').style.display = '';
+    document.getElementById('temporalAnalysis').style.display = '';
   }
+  // If no data, sections stay hidden (display:none from HTML)
 })();
 
 // ============================================================
@@ -1389,11 +2051,18 @@ if (patternMatches.length) {
     let sources = '';
     if (n.source==='icij'||n.source==='both') sources+='<span class="source-badge icij">ICIJ</span>';
     if (n.source==='opensanctions'||n.source==='both') sources+='<span class="source-badge os">Sanctions</span>';
+    if (n.source==='gleif') sources+='<span class="source-badge" style="background:rgba(63,185,80,0.15);color:var(--gleif-color)">GLEIF</span>';
+    if (n.source==='sec') sources+='<span class="source-badge" style="background:rgba(57,210,192,0.15);color:var(--sec-color)">SEC</span>';
+    if (n.source==='companies_house') sources+='<span class="source-badge" style="background:rgba(167,139,250,0.15);color:var(--uk-color)">UK Co.</span>';
+    if (n.source==='courtlistener') sources+='<span class="source-badge" style="background:rgba(249,117,131,0.15);color:var(--court-color)">Court</span>';
+    if (n.source==='aleph') sources+='<span class="source-badge" style="background:rgba(121,192,255,0.15);color:var(--aleph-color)">Aleph</span>';
+    if (n.source==='wikidata') sources+='<span class="source-badge" style="background:rgba(86,212,221,0.15);color:var(--wikidata-color)">Wiki</span>';
+    if (n.source==='land_registry') sources+='<span class="source-badge" style="background:rgba(126,231,135,0.15);color:var(--land-color)">Land</span>';
 
     let flags = '';
-    if (n.sanctioned) flags+='<span class="tag sanction">Sanctioned</span> ';
-    if (n.pep) flags+='<span class="tag pep">PEP</span> ';
-    if ((n.topics||[]).includes('role.rca')) flags+='<span class="tag rca">RCA</span> ';
+    if (n.sanctioned) flags+='<span class="tag sanction" style="cursor:pointer" onclick="goToRef(&quot;ref-sanctioned&quot;)">Sanctioned</span> ';
+    if (n.pep) flags+='<span class="tag pep" style="cursor:pointer" onclick="goToRef(&quot;ref-pep&quot;)">PEP</span> ';
+    if ((n.topics||[]).includes('role.rca')) flags+='<span class="tag rca" style="cursor:pointer" onclick="goToRef(&quot;ref-rca&quot;)">RCA</span> ';
     if (!flags) flags='<span style="color:var(--text-dim)">-</span>';
 
     tr.innerHTML = `
@@ -1449,7 +2118,7 @@ if (patternMatches.length) {
     const n = nodes.find(x => x.id === id);
     const label = n ? n.label : id;
     const children = (childMap[id] || []).map(c => buildHier(c, depth+1)).filter(Boolean);
-    return { id, name: label.length > 30 ? label.slice(0,28)+'..' : label, _node: n, children: children.length ? children : undefined };
+    return { id, name: label.length > 30 ? label.slice(0,28)+'..' : label, _node: n, _fullName: label, children: children.length ? children : undefined };
   }
 
   const rootData = roots.length === 1
@@ -1486,7 +2155,13 @@ if (patternMatches.length) {
     .attr('dy', '0.35em').attr('x', d => d.children ? -10 : 10)
     .attr('text-anchor', d => d.children ? 'end' : 'start')
     .attr('fill', 'var(--text)').attr('font-size', '11px')
-    .text(d => d.data.name);
+    .text(d => {
+      const full = d.data._fullName || d.data.name;
+      return full.length > 35 ? full.slice(0,33)+'..' : full;
+    });
+
+  // Add tooltips for full names
+  node.append('title').text(d => d.data._fullName || d.data.name);
 })();
 
 // ============================================================
@@ -1494,17 +2169,18 @@ if (patternMatches.length) {
 // ============================================================
 (function buildCoverageHeatmap() {
   const container = document.getElementById('coverageContent');
-  const sourceNames = ['icij', 'opensanctions', 'gleif', 'sec', 'companies_house', 'courtlistener'];
-  const sourceLabels = { icij: 'ICIJ', opensanctions: 'Sanctions', gleif: 'GLEIF', sec: 'SEC', companies_house: 'UK Co.', courtlistener: 'Courts' };
-  const sourceColors = { icij: 'var(--icij-color)', opensanctions: 'var(--os-color)', gleif: 'var(--gleif-color)', sec: 'var(--sec-color)', companies_house: 'var(--uk-color)', courtlistener: 'var(--court-color)' };
+  const sourceNames = ['icij', 'opensanctions', 'gleif', 'sec', 'companies_house', 'courtlistener', 'aleph', 'wikidata', 'land_registry'];
+  const sourceLabels = { icij: 'ICIJ', opensanctions: 'Sanctions', gleif: 'GLEIF', sec: 'SEC', companies_house: 'UK Co.', courtlistener: 'Courts', aleph: 'Aleph', wikidata: 'Wiki', land_registry: 'Land' };
+  const sourceColors = { icij: 'var(--icij-color)', opensanctions: 'var(--os-color)', gleif: 'var(--gleif-color)', sec: 'var(--sec-color)', companies_house: 'var(--uk-color)', courtlistener: 'var(--court-color)', aleph: 'var(--aleph-color)', wikidata: 'var(--wikidata-color)', land_registry: 'var(--land-color)' };
 
   // Group nodes by normalized name to find cross-source entities
   const nameMap = {};
   nodes.forEach(n => {
     const norm = n.label.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
-    if (!nameMap[norm]) nameMap[norm] = { label: n.label, sources: new Set(), nodes: [], sanctioned: false, pep: false };
+    if (!nameMap[norm]) nameMap[norm] = { label: n.label, type: n.type || '', sources: new Set(), nodes: [], sanctioned: false, pep: false };
     nameMap[norm].sources.add(n.source);
     nameMap[norm].nodes.push(n);
+    if (n.type && !nameMap[norm].type) nameMap[norm].type = n.type;
     if (n.sanctioned) nameMap[norm].sanctioned = true;
     if (n.pep) nameMap[norm].pep = true;
   });
@@ -1515,9 +2191,11 @@ if (patternMatches.length) {
     .slice(0, 60);
 
   // Build HTML table
-  let html = '<table class="matrix-table" style="font-size:12px"><thead><tr><th style="text-align:left;min-width:200px">Entity</th>';
-  sourceNames.forEach(s => { html += `<th style="text-align:center;width:70px;font-size:10px">${sourceLabels[s]}</th>`; });
-  html += '<th style="text-align:center;width:50px">#</th></tr></thead><tbody>';
+  const colTooltips = { icij: 'ICIJ Offshore Leaks — 810K+ entities from 5 leak investigations', opensanctions: 'OpenSanctions — 320+ sanctions lists and PEP databases', gleif: 'GLEIF LEI Registry — global corporate identifiers', sec: 'SEC EDGAR — US public company filings', companies_house: 'UK Companies House — UK company registry', courtlistener: 'CourtListener — US federal court records', aleph: 'Aleph (OCCRP) — investigative data platform', wikidata: 'Wikidata — structured entity data', land_registry: 'Land Registry — property ownership records' };
+  let html = '<table class="matrix-table" id="coverageTable" style="font-size:12px"><thead><tr><th class="sortable" data-col="0" data-type="alpha" style="text-align:left;min-width:200px" title="Entity name as found in the source databases">Entity <span class="sort-arrow"></span></th>';
+  html += '<th class="sortable" data-col="1" data-type="alpha" style="text-align:left;width:90px" title="Entity type: Person, Company, Officer, Address, etc.">Type <span class="sort-arrow"></span></th>';
+  sourceNames.forEach((s, i) => { html += `<th class="sortable" data-col="${i+2}" data-type="alpha" style="text-align:center;width:70px;font-size:10px" title="${colTooltips[s] || s}">${sourceLabels[s]} <span class="sort-arrow"></span></th>`; });
+  html += `<th class="sortable" data-col="${sourceNames.length+2}" data-type="num" style="text-align:center;width:50px" title="Number of independent data sources containing this entity. Higher is more significant."># <span class="sort-arrow"></span></th></tr></thead><tbody>`;
 
   entries.forEach(entry => {
     const sc = entry.sources.size;
@@ -1527,6 +2205,7 @@ if (patternMatches.length) {
     if (entry.sanctioned) nameStyle = 'color:var(--sanction-color);font-weight:600';
     else if (entry.pep) nameStyle = 'color:var(--pep-color);font-weight:600';
     html += `<td style="${nameStyle}">${entry.label.length > 35 ? entry.label.slice(0,33)+'..' : entry.label}</td>`;
+    html += `<td style="color:var(--text-muted);font-size:11px">${entry.type || '-'}</td>`;
     sourceNames.forEach(s => {
       if (entry.sources.has(s)) {
         html += `<td style="text-align:center"><div style="width:16px;height:16px;border-radius:3px;background:${sourceColors[s]};margin:0 auto;opacity:0.85"></div></td>`;
@@ -1602,7 +2281,7 @@ if (patternMatches.length) {
 
   // Sort and layout
   events.sort((a, b) => a.date - b.date);
-  const margin = { top: 40, right: 40, bottom: 40, left: 60 };
+  const margin = { top: 40, right: 40, bottom: 40, left: 120 };
   const innerW = w - margin.left - margin.right;
   const laneHeight = 28;
 
@@ -1631,7 +2310,7 @@ if (patternMatches.length) {
   g.selectAll('.domain,.tick line').attr('stroke', 'var(--border)');
 
   // Lane labels
-  const laneLabels = { icij: 'ICIJ Leaks', opensanctions: 'Sanctions', gleif: 'GLEIF', sec: 'SEC Filings', companies_house: 'UK Companies', courtlistener: 'Court Cases' };
+  const laneLabels = { icij: 'ICIJ Leaks', opensanctions: 'Sanctions', gleif: 'GLEIF', sec: 'SEC Filings', companies_house: 'UK Companies', courtlistener: 'Court Cases', aleph: 'Aleph (OCCRP)', wikidata: 'Wikidata', land_registry: 'Land Registry' };
   sourceLanes.forEach(s => {
     g.append('text').attr('x', -8).attr('y', y(s) + y.bandwidth() / 2)
       .attr('dy', '0.35em').attr('text-anchor', 'end')
@@ -1643,7 +2322,7 @@ if (patternMatches.length) {
   });
 
   // Event dots
-  const srcColors = { icij: 'var(--icij-color)', opensanctions: 'var(--os-color)', gleif: 'var(--gleif-color)', sec: 'var(--sec-color)', companies_house: 'var(--uk-color)', courtlistener: 'var(--court-color)' };
+  const srcColors = { icij: 'var(--icij-color)', opensanctions: 'var(--os-color)', gleif: 'var(--gleif-color)', sec: 'var(--sec-color)', companies_house: 'var(--uk-color)', courtlistener: 'var(--court-color)', aleph: 'var(--aleph-color)', wikidata: 'var(--wikidata-color)', land_registry: 'var(--land-color)' };
 
   g.selectAll('.event').data(events).join('circle')
     .attr('cx', d => x(d.date))
@@ -1672,8 +2351,8 @@ if (patternMatches.length) {
   // Collect all dated events
   const events = [];
   const invYears = { 'offshore-leaks': 2013, 'bahamas-leaks': 2016, 'panama-papers': 2016, 'paradise-papers': 2017, 'pandora-papers': 2021 };
-  const srcLabels = { icij: 'ICIJ', opensanctions: 'OpenSanctions', gleif: 'GLEIF', sec: 'SEC EDGAR', companies_house: 'UK Companies House', courtlistener: 'Court Records' };
-  const srcColors = { icij: 'var(--icij-color)', opensanctions: 'var(--os-color)', gleif: 'var(--gleif-color)', sec: 'var(--sec-color)', companies_house: 'var(--uk-color)', courtlistener: 'var(--court-color)' };
+  const srcLabels = { icij: 'ICIJ', opensanctions: 'OpenSanctions', gleif: 'GLEIF', sec: 'SEC EDGAR', companies_house: 'UK Companies House', courtlistener: 'Court Records', aleph: 'Aleph', wikidata: 'Wikidata', land_registry: 'Land Registry' };
+  const srcColors = { icij: 'var(--icij-color)', opensanctions: 'var(--os-color)', gleif: 'var(--gleif-color)', sec: 'var(--sec-color)', companies_house: 'var(--uk-color)', courtlistener: 'var(--court-color)', aleph: 'var(--aleph-color)', wikidata: 'var(--wikidata-color)', land_registry: 'var(--land-color)' };
 
   // ICIJ investigations
   const seenInv = new Set();
@@ -1772,7 +2451,9 @@ if (patternMatches.length) {
 // ============================================================
 (function buildCorporateStructure() {
   const svgEl = d3.select('#corporateSvg');
-  const w = Math.max(document.body.clientWidth - 48, 700);
+  const wrapper = document.getElementById('corporateWrapper');
+  const wrapW = wrapper ? wrapper.clientWidth : Math.max(document.body.clientWidth - 48, 700);
+  const wrapH = wrapper ? wrapper.clientHeight : 600;
 
   // Find corporate relationship edges
   const corpRels = ['parent_of', 'subsidiary', 'person_with_significant_control', 'intermediary_of', 'co_officer'];
@@ -1842,12 +2523,64 @@ if (patternMatches.length) {
     if (d.y > maxY) maxY = d.y;
   });
 
-  const svgW = maxX - minX + nodeW + margin.left + margin.right;
-  const svgH = maxY - minY + nodeH + margin.top + margin.bottom + 40;
-  svgEl.attr('width', Math.max(w, svgW)).attr('height', svgH);
+  // SVG fills the wrapper; zoom handles the rest
+  svgEl.attr('width', wrapW).attr('height', wrapH);
 
-  const g = svgEl.append('g')
-    .attr('transform', `translate(${-minX + margin.left + nodeW/2},${margin.top})`);
+  // Zoom container — zoom transform applied here
+  const zoomG = svgEl.append('g');
+  const g = zoomG.append('g');
+
+  // D3 zoom behavior
+  const zoom = d3.zoom()
+    .scaleExtent([0.1, 3])
+    .on('zoom', (event) => zoomG.attr('transform', event.transform));
+  svgEl.call(zoom);
+
+  // Fit-to-view: measure the rendered content's bounding box and scale to fill wrapper
+  function fitToView(animate) {
+    const gNode = g.node();
+    if (!gNode) return;
+    const bbox = gNode.getBBox();
+    if (bbox.width === 0 || bbox.height === 0) return;
+    const curW = wrapper ? wrapper.clientWidth : wrapW;
+    const curH = wrapper ? wrapper.clientHeight : wrapH;
+    svgEl.attr('width', curW).attr('height', curH);
+    const pad = 40;
+    const scaleX = (curW - pad * 2) / bbox.width;
+    const scaleY = (curH - pad * 2) / bbox.height;
+    const scale = Math.min(scaleX, scaleY, 2);
+    const tx = (curW / 2) - (bbox.x + bbox.width / 2) * scale;
+    const ty = (curH / 2) - (bbox.y + bbox.height / 2) * scale;
+    const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
+    if (animate) {
+      svgEl.transition().duration(500).call(zoom.transform, t);
+    } else {
+      svgEl.call(zoom.transform, t);
+    }
+  }
+
+  // Wire buttons
+  const fitBtn = document.getElementById('corpFitBtn');
+  const resetBtn = document.getElementById('corpResetBtn');
+  if (fitBtn) fitBtn.addEventListener('click', () => fitToView(true));
+  if (resetBtn) resetBtn.addEventListener('click', () => {
+    svgEl.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+  });
+
+  // Auto-fit when the Corporate Structure tab becomes visible
+  let fitted = false;
+  const observer = new MutationObserver(() => {
+    const tab = document.getElementById('tab-corporate');
+    if (tab && tab.classList.contains('active') && !fitted) {
+      fitted = true;
+      setTimeout(() => fitToView(false), 50);
+    }
+  });
+  observer.observe(document.getElementById('tab-corporate'), { attributes: true, attributeFilter: ['class'] });
+  // Also fit immediately in case tab is already active
+  if (document.getElementById('tab-corporate').classList.contains('active')) {
+    setTimeout(() => fitToView(false), 50);
+  }
 
   // Links (vertical)
   g.selectAll('.corp-link').data(root.links()).join('path')
@@ -1888,11 +2621,51 @@ if (patternMatches.length) {
     .attr('width', nodeW).attr('height', 4).attr('rx', 2)
     .attr('fill', d => d.data._node ? nodeColor(d.data._node) : 'var(--border)');
 
-  // Name
+  // Name (show _fullName when it fits, otherwise truncated name)
   nodeG.append('text')
     .attr('x', nodeW/2).attr('y', nodeH/2 + 2)
     .attr('text-anchor', 'middle').attr('fill', 'var(--text)').attr('font-size', '11px').attr('font-weight', '500')
-    .text(d => d.data.name);
+    .text(d => {
+      const full = d.data._fullName || d.data.name;
+      return full.length > 24 ? full.slice(0,22)+'..' : full;
+    });
+
+  // Rich tooltip on hover
+  nodeG.on('mouseover', (event, d) => {
+    const n = d.data._node;
+    const tip = document.getElementById('tooltip');
+    let html = `<strong>${d.data._fullName || d.data.name}</strong>`;
+    if (n) {
+      if (n.type) html += ` <span style="color:var(--text-dim)">(${n.type})</span>`;
+      const srcLabels = { icij: 'ICIJ Offshore Leaks', opensanctions: 'OpenSanctions', both: 'Multiple Sources', gleif: 'GLEIF LEI Registry', sec: 'SEC EDGAR', companies_house: 'UK Companies House', courtlistener: 'CourtListener', aleph: 'OCCRP Aleph', wikidata: 'Wikidata' };
+      html += `<br><span style="color:var(--text-dim)">Source:</span> ${srcLabels[n.source] || n.source}`;
+      if (n.country_codes && n.country_codes.length) html += `<br><span style="color:var(--text-dim)">Countries:</span> ${n.country_codes.join(', ')}`;
+      if (n.investigation) html += `<br><span style="color:var(--text-dim)">Investigation:</span> ${n.investigation.replace(/-/g, ' ')}`;
+      if (n.sanctioned) html += `<br><span style="color:var(--sanction-color);font-weight:600">Sanctioned — on international sanctions lists</span>`;
+      if (n.pep) html += `<br><span style="color:var(--pep-color);font-weight:600">Politically Exposed Person</span>`;
+      if ((n.topics||[]).includes('role.rca')) html += `<br><span style="color:var(--rca-color)">Close associate of PEP</span>`;
+      if (n.risk_score > 0) {
+        const rc = n.risk_level === 'CRITICAL' ? 'var(--sanction-color)' : n.risk_level === 'HIGH' ? '#f0883e' : n.risk_level === 'MEDIUM' ? 'var(--pep-color)' : 'var(--text-dim)';
+        html += `<br><span style="color:var(--text-dim)">Risk:</span> <span style="color:${rc};font-weight:600">${n.risk_score}/100 (${n.risk_level})</span>`;
+      }
+      // Why this node matters in the corporate structure
+      const rel = d.data._rel;
+      if (rel) {
+        const relDesc = { parent_of: 'Parent company — owns or controls the entity above', subsidiary: 'Subsidiary — owned or controlled by the entity above', person_with_significant_control: 'PSC — person with 25%+ ownership, voting rights, or right to appoint directors', intermediary_of: 'Intermediary — formation agent, law firm, or registered agent facilitating the structure', co_officer: 'Co-officer — serves alongside other officers in a related entity' };
+        html += `<br><span style="color:var(--both-color);font-size:11px">${relDesc[rel] || rel.replace(/_/g, ' ')}</span>`;
+      }
+    }
+    tip.innerHTML = html;
+    tip.classList.add('visible');
+    tip.style.left = (event.clientX + 14) + 'px';
+    tip.style.top = (event.clientY - 14) + 'px';
+  })
+  .on('mousemove', (event) => {
+    const tip = document.getElementById('tooltip');
+    tip.style.left = (event.clientX + 14) + 'px';
+    tip.style.top = (event.clientY - 14) + 'px';
+  })
+  .on('mouseout', () => document.getElementById('tooltip').classList.remove('visible'));
 
   // Type label below name
   nodeG.append('text')
@@ -1902,7 +2675,7 @@ if (patternMatches.length) {
       if (!d.data._node) return '';
       const parts = [];
       if (d.data._node.type) parts.push(d.data._node.type);
-      const src = { icij: 'ICIJ', opensanctions: 'Sanctions', gleif: 'GLEIF', sec: 'SEC', companies_house: 'UK Co.', courtlistener: 'Court' };
+      const src = { icij: 'ICIJ', opensanctions: 'Sanctions', gleif: 'GLEIF', sec: 'SEC', companies_house: 'UK Co.', courtlistener: 'Court', aleph: 'Aleph', wikidata: 'Wiki', land_registry: 'Land' };
       if (d.data._node.source) parts.push(src[d.data._node.source] || d.data._node.source);
       return parts.join(' · ');
     });
@@ -1952,6 +2725,124 @@ document.getElementById('toggleOs').addEventListener('change',applyFilters);
 document.getElementById('toggleAddresses').addEventListener('change',applyFilters);
 document.getElementById('searchInput').addEventListener('input',applyFilters);
 applyFilters();
+
+// ============================================================
+// SORTABLE TABLES
+// ============================================================
+function _cellSortValue(cell) {
+  // For cells with colored indicator divs (source coverage heatmap),
+  // check if the div has a non-surface background = data present
+  const div = cell.querySelector('div[style*="background"]');
+  if (div) {
+    const bg = div.style.background || '';
+    // surface-2 means empty; anything else means present
+    return bg.includes('surface') ? '0' : '1';
+  }
+  return cell.textContent.trim();
+}
+
+function makeSortable(table) {
+  if (!table) return;
+  const headers = table.querySelectorAll('th.sortable');
+  let currentSort = { col: -1, asc: true };
+
+  headers.forEach(th => {
+    th.addEventListener('click', () => {
+      const col = parseInt(th.dataset.col);
+      const isNum = th.dataset.type === 'num';
+      const asc = currentSort.col === col ? !currentSort.asc : true;
+      currentSort = { col, asc };
+
+      // Update arrow indicators
+      headers.forEach(h => {
+        h.classList.remove('sorted');
+        h.querySelector('.sort-arrow').textContent = '';
+      });
+      th.classList.add('sorted');
+      th.querySelector('.sort-arrow').textContent = asc ? '\u25B2' : '\u25BC';
+
+      // Sort tbody rows
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        const aVal = a.cells[col] ? _cellSortValue(a.cells[col]) : '';
+        const bVal = b.cells[col] ? _cellSortValue(b.cells[col]) : '';
+        if (isNum || (!isNaN(parseFloat(aVal)) && !isNaN(parseFloat(bVal)) && aVal !== '' && bVal !== '')) {
+          const aNum = parseFloat(aVal) || 0;
+          const bNum = parseFloat(bVal) || 0;
+          return asc ? aNum - bNum : bNum - aNum;
+        }
+        return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    });
+  });
+}
+
+// Apply sortable to Source Matrix table
+makeSortable(document.getElementById('matrixTable'));
+
+// Apply sortable to Coverage table (generated dynamically)
+const coverageTable = document.getElementById('coverageTable');
+if (coverageTable) makeSortable(coverageTable);
+
+// ============================================================
+// PATTERN BANNERS (Corporate Structure + Jurisdiction Flow)
+// ============================================================
+(function addPatternBanners() {
+  if (!patternMatches.length) return;
+  const riskColors = { CRITICAL: 'var(--sanction-color)', HIGH: '#f0883e', MEDIUM: 'var(--pep-color)', LOW: 'var(--text-muted)' };
+  const riskBg = { CRITICAL: 'rgba(248,81,73,0.12)', HIGH: 'rgba(240,136,62,0.12)', MEDIUM: 'rgba(210,153,34,0.12)', LOW: 'rgba(139,148,158,0.08)' };
+
+  // Patterns relevant to corporate structure
+  const corpPatternKeywords = ['matryoshka', 'beneficial_ownership', 'shell_company', 'nominee',
+    'circular_ownership', 'scatter_gather', 'network_chokepoint', 'starburst',
+    'intermediary_cluster', 'rapid_dissolution', 'llp_opacity', 'cross_source'];
+  const corpPatterns = patternMatches.filter(p => {
+    const name = (p.pattern || p.id || p.title || '').toLowerCase();
+    return corpPatternKeywords.some(k => name.includes(k));
+  });
+
+  // Patterns relevant to jurisdiction flow
+  const flowPatternKeywords = ['regulatory_arbitrage', 'matryoshka', 'mirror', 'jurisdiction',
+    'cross_source', 'circular_ownership', 'scatter_gather'];
+  const flowPatterns = patternMatches.filter(p => {
+    const name = (p.pattern || p.id || p.title || '').toLowerCase();
+    return flowPatternKeywords.some(k => name.includes(k));
+  });
+
+  function renderBanner(container, patterns, label, context) {
+    if (!patterns.length || !container) return;
+    let html = '<div class="pattern-banner"><div class="banner-title">' + label + '</div>';
+    if (context) html += `<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">${context}</div>`;
+    patterns.forEach(p => {
+      const rc = riskColors[p.risk] || 'var(--text-muted)';
+      const bg = riskBg[p.risk] || 'rgba(139,148,158,0.08)';
+      html += `<div class="banner-item"><a href="#" onclick="goToPattern('${p.pattern||p.title}');return false" style="color:var(--text);text-decoration:underline;font-weight:600">${p.title}</a> <span class="risk-badge" style="background:${bg};color:${rc}">${p.risk}</span>`;
+      if (p.evidence && p.evidence.length) html += ` — ${p.evidence[0].length > 90 ? p.evidence[0].slice(0,88)+'...' : p.evidence[0]}`;
+      html += '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  renderBanner(document.getElementById('corporatePatternBanner'), corpPatterns,
+    `${corpPatterns.length} Pattern${corpPatterns.length > 1 ? 's' : ''} Relevant to Corporate Structure`,
+    'These patterns relate to ownership arrangements, beneficial control, intermediary networks, or shell company indicators visible in the corporate hierarchy below.');
+  renderBanner(document.getElementById('flowPatternBanner'), flowPatterns,
+    `${flowPatterns.length} Pattern${flowPatterns.length > 1 ? 's' : ''} Relevant to Jurisdiction Flow`,
+    'These patterns relate to multi-jurisdiction structures, regulatory arbitrage, or cross-border arrangements visible in the jurisdiction flow below.');
+
+  // If no specific keywords matched but patterns exist, show all
+  if (corpPatterns.length === 0 && patternMatches.length > 0) {
+    renderBanner(document.getElementById('corporatePatternBanner'), patternMatches,
+      'All Detected Patterns', 'No patterns specifically matched corporate structure keywords, showing all detected patterns for context.');
+  }
+  if (flowPatterns.length === 0 && patternMatches.length > 0) {
+    renderBanner(document.getElementById('flowPatternBanner'), patternMatches,
+      'All Detected Patterns', 'No patterns specifically matched jurisdiction keywords, showing all detected patterns for context.');
+  }
+})();
 </script>
 </body>
 </html>

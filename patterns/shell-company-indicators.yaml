@@ -11,6 +11,11 @@ sources:
   - moodys_shell_indicators
   - fatf_bo_concealment_2018
   - financial_crime_academy
+references:
+  - title: "Moody's — Seven Indicators of a Shell Company"
+    url: https://www.moodys.com/web/en/us/kyc/resources/insights/seven-indicators-shell-company-risk.html
+  - title: "FATF-Egmont — Concealment of Beneficial Ownership (2018)"
+    url: https://www.fatf-gafi.org/content/dam/fatf-gafi/reports/FATF-Egmont-Concealment-beneficial-ownership.pdf
 
 detection:
   conditions:

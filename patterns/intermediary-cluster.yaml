@@ -11,6 +11,13 @@ sources:
   - panama_papers_mossack_fonseca
   - paradise_papers_appleby
   - uk_nra_2025
+references:
+  - title: "FATF-Egmont — Concealment of Beneficial Ownership (2018)"
+    url: https://www.fatf-gafi.org/content/dam/fatf-gafi/reports/FATF-Egmont-Concealment-beneficial-ownership.pdf
+  - title: "ICIJ Investigations — Panama Papers, Paradise Papers"
+    url: https://www.icij.org/investigations/
+  - title: "UK National Risk Assessment of Money Laundering and Terrorist Financing"
+    url: https://www.gov.uk/government/publications/national-risk-assessment-of-money-laundering-and-terrorist-financing-2025
 
 detection:
   conditions:

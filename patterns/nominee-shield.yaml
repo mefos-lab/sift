@@ -10,6 +10,13 @@ sources:
   - fatf_bo_concealment_2018
   - moodys_shell_indicators
   - all_five_investigations
+references:
+  - title: "FATF-Egmont — Concealment of Beneficial Ownership (2018)"
+    url: https://www.fatf-gafi.org/content/dam/fatf-gafi/reports/FATF-Egmont-Concealment-beneficial-ownership.pdf
+  - title: "Moody's — Seven Indicators of a Shell Company"
+    url: https://www.moodys.com/web/en/us/kyc/resources/insights/seven-indicators-shell-company-risk.html
+  - title: "ICIJ Investigations"
+    url: https://www.icij.org/investigations/
 
 detection:
   conditions:

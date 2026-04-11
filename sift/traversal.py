@@ -66,6 +66,9 @@ async def traverse(
     sec_client: Any | None = None,
     ch_client: Any | None = None,
     cl_client: Any | None = None,
+    aleph_client: Any | None = None,
+    wikidata_client: Any | None = None,
+    land_registry_client: Any | None = None,
 ) -> TraversalResult:
     """Breadth-first traversal across multiple databases.
 
@@ -81,6 +84,9 @@ async def traverse(
     sec_client : SEC EDGAR client (optional)
     ch_client : UK Companies House client (optional)
     cl_client : CourtListener client (optional)
+    aleph_client : OCCRP Aleph client (optional)
+    wikidata_client : Wikidata client (optional)
+    land_registry_client : UK Land Registry client (optional)
     """
     nodes: dict[str, GraphNode] = {}
     edges: list[GraphEdge] = []
@@ -180,6 +186,7 @@ async def traverse(
                             "jurisdiction": r.get("jurisdiction", ""),
                             "country_codes": [r["country"]] if r.get("country") else [],
                             "status": r.get("status", ""),
+                            "incorporation_date": r.get("initial_registration", ""),
                         })
 
         # SEC EDGAR search
@@ -191,11 +198,13 @@ async def traverse(
                         cik = str(r.get("cik", ""))
                         if cik:
                             nid = f"sec-{cik}"
+                            file_date = r.get("file_date", "")
                             _add_node(nid, "sec", r.get("entity_name", cik),
                                       "Company", 0, {
                                 "cik": cik,
                                 "filing_type": r.get("filing_type", ""),
-                                "file_date": r.get("file_date", ""),
+                                "file_date": file_date,
+                                "incorporation_date": file_date,  # use filing date for timeline
                             })
             except Exception:
                 pass  # SEC rate limits or connectivity issues
@@ -214,6 +223,7 @@ async def traverse(
                                 "company_number": cn,
                                 "company_status": r.get("company_status", ""),
                                 "address": r.get("address_snippet", ""),
+                                "incorporation_date": r.get("date_of_creation", ""),
                             })
             except Exception:
                 pass  # No API key or connectivity issues
@@ -227,15 +237,56 @@ async def traverse(
                         did = r.get("docket_id") or r.get("id")
                         if did:
                             nid = f"court-{did}"
+                            date_filed = r.get("dateFiled", r.get("date_filed", ""))
                             _add_node(nid, "courtlistener",
                                       r.get("caseName", r.get("case_name", str(did))),
                                       "Case", 0, {
                                 "docket_id": did,
                                 "court": r.get("court", ""),
-                                "date_filed": r.get("dateFiled", r.get("date_filed", "")),
+                                "date_filed": date_filed,
+                                "incorporation_date": date_filed,  # use filing date for timeline
                             })
             except Exception:
                 pass  # No token or connectivity issues
+
+        # OCCRP Aleph search
+        if aleph_client and api_calls < budget:
+            try:
+                aleph_res = await _api(aleph_client.search_entities(name, limit=5))
+                if aleph_res:
+                    for r in aleph_res.get("results", [])[:5]:
+                        aid = r.get("id", "")
+                        if aid:
+                            nid = f"aleph-{aid}"
+                            _add_node(nid, "aleph", r.get("name", aid),
+                                      r.get("schema", "Thing"), 0, {
+                                "aleph_id": aid,
+                                "countries": r.get("countries", []),
+                                "country_codes": r.get("countries", []),
+                                "jurisdiction": r.get("jurisdiction", ""),
+                                "registration_number": r.get("registration_number", ""),
+                                "datasets": r.get("datasets", []),
+                                "incorporation_date": r.get("incorporation_date", ""),
+                            })
+            except Exception:
+                pass
+
+        # Wikidata search
+        if wikidata_client and api_calls < budget:
+            try:
+                wd_res = await _api(wikidata_client.search(name, limit=3))
+                if wd_res:
+                    for r in wd_res.get("results", [])[:3]:
+                        wid = r.get("id", "")
+                        if wid:
+                            nid = f"wikidata-{wid}"
+                            _add_node(nid, "wikidata", r.get("label", wid),
+                                      "Entity", 0, {
+                                "wikidata_id": wid,
+                                "description": r.get("description", ""),
+                            })
+            except Exception:
+                pass
 
     # ── Hops 1..N ────────────────────────────────────────────
 
@@ -444,6 +495,30 @@ async def traverse(
                 except Exception:
                     pass
 
+            # ── Expand Aleph nodes via similar entities ──
+            if aleph_client and fnode.id.startswith("aleph-") and api_calls < budget:
+                aleph_id = fnode.id[6:]
+                try:
+                    similar = await _api(aleph_client.get_entity_similar(
+                        aleph_id, limit=max_fanout,
+                    ))
+                    if similar:
+                        for sr in similar.get("results", [])[:max_fanout]:
+                            sid = sr.get("id", "")
+                            if sid:
+                                snid = f"aleph-{sid}"
+                                _add_node(snid, "aleph", sr.get("name", sid),
+                                          sr.get("schema", "Thing"), hop, {
+                                    "aleph_id": sid,
+                                    "countries": sr.get("countries", []),
+                                    "country_codes": sr.get("countries", []),
+                                    "jurisdiction": sr.get("jurisdiction", ""),
+                                    "datasets": sr.get("datasets", []),
+                                })
+                                _add_edge(fnode.id, snid, "similar_entity", hop)
+                except Exception:
+                    pass
+
     # ── Normalize ────────────────────────────────────────────
     from .normalizer import normalize_graph
     pre_count = len(nodes)
@@ -512,6 +587,10 @@ async def traverse(
             {
                 "pattern": m.pattern_name,
                 "title": m.title,
+                "description": m.description,
+                "sources": m.sources,
+                "status": m.status,
+                "references": m.references,
                 "risk": m.risk_level,
                 "confidence": m.confidence,
                 "conditions_met": m.conditions_met,
@@ -537,7 +616,9 @@ def result_to_visualizer_data(
 
     # Prefix-to-source mapping for new sources
     _new_source_types = {"gleif-": "gleif", "sec-": "sec",
-                         "uk-": "companies_house", "court-": "courtlistener"}
+                         "uk-": "companies_house", "court-": "courtlistener",
+                         "aleph-": "aleph", "wikidata-": "wikidata",
+                         "land-": "land_registry"}
 
     for n in result.nodes.values():
         if n.id.startswith("icij-"):
@@ -588,6 +669,7 @@ def result_to_visualizer_data(
                         "score": n.properties.get("score"),
                         "file_date": n.properties.get("file_date", ""),
                         "date_filed": n.properties.get("date_filed", ""),
+                        "incorporation_date": n.properties.get("incorporation_date", ""),
                         "properties": {
                             "topics": n.properties.get("topics", []),
                             "nationality": n.properties.get("country_codes", []),

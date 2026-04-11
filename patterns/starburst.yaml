@@ -9,6 +9,11 @@ status: ESTABLISHED
 sources:
   - fatf_bo_concealment_2018
   - all_five_investigations
+references:
+  - title: "FATF-Egmont — Concealment of Beneficial Ownership (2018)"
+    url: https://www.fatf-gafi.org/content/dam/fatf-gafi/reports/FATF-Egmont-Concealment-beneficial-ownership.pdf
+  - title: "ICIJ Investigations"
+    url: https://www.icij.org/investigations/
 
 detection:
   conditions:

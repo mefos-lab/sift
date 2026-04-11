@@ -12,6 +12,9 @@ status: ESTABLISHED
 sources:
   - investigative_methodology
   - icij_cross_dataset_linking
+references:
+  - title: "ICIJ Investigations — Methodology and Cross-Dataset Linking"
+    url: https://www.icij.org/investigations/
 
 detection:
   conditions:

@@ -12,6 +12,11 @@ sources:
   - uk_nra_2025
   - transparency_international_llp_report
   - occrp
+references:
+  - title: "UK National Risk Assessment of Money Laundering and Terrorist Financing"
+    url: https://www.gov.uk/government/publications/national-risk-assessment-of-money-laundering-and-terrorist-financing-2025
+  - title: "Transparency International — Publications"
+    url: https://www.transparency.org/en/publications
 
 detection:
   conditions:

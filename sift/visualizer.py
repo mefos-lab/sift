@@ -1,9 +1,17 @@
-"""Transform investigation data into a standalone D3 visualization."""
+"""Transform investigation data into a D3 visualization.
+
+Supports two output modes:
+- **Split** (default): writes ``investigations/<slug>/index.html`` + ``data.js``.
+  Template loads D3 and data from external files.  Edit the template and refresh.
+- **Portable**: writes a single self-contained HTML with D3 and data inlined.
+  Good for sharing a file by email/Slack.
+"""
 
 from __future__ import annotations
 
 import json
 import re
+import shutil
 import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,31 +19,35 @@ from pathlib import Path
 TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "visualizations" / "investigation-viz.html"
 D3_PATH = Path(__file__).resolve().parent.parent / "visualizations" / "d3.v7.min.js"
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "investigations"
-PLACEHOLDER = "__INVESTIGATION_DATA__"
-D3_PLACEHOLDER = "__D3_INLINE__"
+SHARED_DIR = OUTPUT_DIR / "_shared"
 
 
 def generate_visualization(
     investigation_data: dict,
     output_path: str | Path | None = None,
     open_browser: bool = True,
+    portable: bool = False,
+    slug: str | None = None,
 ) -> Path:
-    """Build a standalone HTML visualization from investigation results.
+    """Build an investigation visualization.
 
     Parameters
     ----------
     investigation_data : dict
-        Keys (all optional):
-        - ``query``: the original search string
-        - ``icij_results``: list of ICIJ reconcile result dicts
-        - ``icij_entities``: dict mapping node_id -> entity detail dict
-        - ``icij_extended``: dict from ``icij_extend`` (has ``rows`` key)
-        - ``icij_network``: list of edge dicts ``{"source_id", "target_id", "relationship"}``
-        - ``opensanctions_results``: list of OpenSanctions search/match result dicts
+        Keys (all optional): ``query``, ``icij_results``,
+        ``icij_entities``, ``icij_extended``, ``icij_network``,
+        ``opensanctions_results``, ``pattern_matches``.
     output_path : str or Path, optional
-        Where to write the HTML file.  Defaults to ``investigations/<query>-<timestamp>.html``.
+        Explicit output location.  In split mode this is the directory;
+        in portable mode it is the HTML file path.
     open_browser : bool
-        Open the file in the default browser after writing.
+        Open the result in the default browser.
+    portable : bool
+        If True, produce a single self-contained HTML file with D3 and
+        data inlined (the legacy behaviour).  Default is split mode.
+    slug : str, optional
+        Directory name under ``investigations/``.  Derived from the
+        query string when omitted.
 
     Returns
     -------
@@ -47,22 +59,118 @@ def generate_visualization(
         {
             "metadata": {
                 "query": investigation_data.get("query", "Investigation"),
-                "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                "generated_at": datetime.now(timezone.utc).strftime(
+                    "%Y-%m-%d %H:%M UTC"
+                ),
             },
             "nodes": nodes,
             "edges": edges,
             "pattern_matches": investigation_data.get("pattern_matches", []),
+            "next_steps": investigation_data.get("next_steps")
+                or _generate_next_steps(nodes, edges, investigation_data),
         },
         ensure_ascii=False,
     )
 
+    if slug is None:
+        slug = _slugify(investigation_data.get("query", "investigation"))
+
+    if portable:
+        return _write_portable(graph_json, slug, output_path, open_browser)
+    return _write_split(graph_json, slug, output_path, open_browser)
+
+
+# ------------------------------------------------------------------
+# Split mode (default) — external data.js + index.html
+# ------------------------------------------------------------------
+
+def _ensure_shared_assets() -> None:
+    """Copy D3 to the shared directory if missing or outdated."""
+    SHARED_DIR.mkdir(parents=True, exist_ok=True)
+    shared_d3 = SHARED_DIR / "d3.v7.min.js"
+    if not shared_d3.exists() or shared_d3.stat().st_size != D3_PATH.stat().st_size:
+        shutil.copy2(D3_PATH, shared_d3)
+
+
+def _prepare_split_html(template: str, build_ts: int) -> str:
+    """Prepare the HTML template for split mode (external D3 + data)."""
+    html = template.replace("<script>__D3_INLINE__</script>\n", "")
+    html = html.replace("__D3_SRC__", "d3.v7.min.js")
+    html = html.replace("__BUILD_TS__", str(build_ts))
+    html = html.replace("__PORTABLE_DATA_INLINE__", "")
+    return html
+
+
+def _write_split(
+    graph_json: str,
+    slug: str,
+    output_path: str | Path | None,
+    open_browser: bool,
+) -> Path:
+    """Write split files: data.js + index.html into investigations/<slug>/."""
+    if output_path is not None:
+        inv_dir = Path(output_path)
+        if inv_dir.suffix:
+            inv_dir = inv_dir.parent
+    else:
+        inv_dir = OUTPUT_DIR / slug
+
+    inv_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Copy D3 into the investigation directory (avoids file:// cross-origin issues)
+    local_d3 = inv_dir / "d3.v7.min.js"
+    if not local_d3.exists() or local_d3.stat().st_size != D3_PATH.stat().st_size:
+        shutil.copy2(D3_PATH, local_d3)
+
+    # 2. Write data.js
+    ts = int(datetime.now(timezone.utc).timestamp())
+    data_path = inv_dir / "data.js"
+    data_path.write_text(
+        f"const SIFT_DATA = {graph_json};\n", encoding="utf-8",
+    )
+
+    # 2. Save raw JSON for rebuilds
+    raw_path = inv_dir / "raw-data.json"
+    raw_path.write_text(graph_json, encoding="utf-8")
+
+    # 3. Write index.html
+    template = TEMPLATE_PATH.read_text(encoding="utf-8")
+    html = _prepare_split_html(template, ts)
+    index_path = inv_dir / "index.html"
+    index_path.write_text(html, encoding="utf-8")
+
+    if open_browser:
+        webbrowser.open(index_path.as_uri())
+
+    return index_path
+
+
+# ------------------------------------------------------------------
+# Portable mode — single self-contained HTML
+# ------------------------------------------------------------------
+
+def _write_portable(
+    graph_json: str,
+    slug: str,
+    output_path: str | Path | None,
+    open_browser: bool,
+) -> Path:
+    """Write a single self-contained HTML file with everything inlined."""
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
     d3_js = D3_PATH.read_text(encoding="utf-8") if D3_PATH.exists() else ""
-    html = template.replace(D3_PLACEHOLDER, d3_js).replace(PLACEHOLDER, graph_json)
+
+    html = template.replace("__D3_INLINE__", d3_js)
+    # Remove external script tags (not needed in portable mode)
+    html = re.sub(r'<script src="__D3_SRC__"></script>\n?', "", html)
+    html = re.sub(r'<script src="data\.js\?v=__BUILD_TS__"></script>\n?', "", html)
+    # Inline the data
+    html = html.replace(
+        "// __PORTABLE_DATA_INLINE__",
+        f"const SIFT_DATA = {graph_json};",
+    )
 
     if output_path is None:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        slug = _slugify(investigation_data.get("query", "investigation"))
         ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         output_path = OUTPUT_DIR / f"{slug}-{ts}.html"
     else:
@@ -203,6 +311,8 @@ def _build_graph(data: dict) -> tuple[list[dict], list[dict]]:
     _source_from_id = {
         "gleif-": "gleif", "sec-": "sec",
         "uk-": "companies_house", "court-": "courtlistener",
+        "aleph-": "aleph", "wikidata-": "wikidata",
+        "land-": "land_registry",
     }
     for r in data.get("opensanctions_results", []):
         raw_id = r['id']
@@ -244,32 +354,32 @@ def _build_graph(data: dict) -> tuple[list[dict], list[dict]]:
 
     def _resolve_edge_id(raw_id: str) -> str:
         """Resolve a raw edge ID to an existing node ID."""
-        # If the raw_id already has a prefix and exists, use it directly
-        if raw_id.startswith("os-") and raw_id in nodes_map:
+        # Direct match — already exists in the graph
+        if raw_id in nodes_map:
             return raw_id
-        if raw_id.startswith("icij-"):
-            if raw_id in id_remap:
-                return id_remap[raw_id]
-            if raw_id in nodes_map:
-                return raw_id
 
-        # Try canonical remap with icij- prefix (for merged officer nodes)
+        # Canonical remap (merged officer nodes)
+        if raw_id in id_remap:
+            return id_remap[raw_id]
+
+        # Try with icij- prefix (ICIJ nodes stored as icij-{id})
         icij_key = f"icij-{raw_id}"
         if icij_key in id_remap:
             return id_remap[icij_key]
+        if icij_key in nodes_map:
+            return icij_key
 
-        # Try os- prefix (for OpenSanctions nodes referenced by raw ID)
+        # Try with os- prefix (OpenSanctions nodes)
         os_key = f"os-{raw_id}"
         if os_key in nodes_map:
             return os_key
 
-        # Try icij- prefix directly
-        if icij_key in nodes_map:
-            return icij_key
-
-        # Last resort: check if already-prefixed os- version exists
-        if raw_id.startswith("os-"):
-            return raw_id
+        # For IDs with source prefixes that didn't match above,
+        # try stripping icij- to find the real node (e.g. icij-uk-123 -> uk-123)
+        if raw_id.startswith("icij-"):
+            stripped = raw_id[5:]
+            if stripped in nodes_map:
+                return stripped
 
         # Fallback: return icij- prefixed (will be created as stub)
         return icij_key
@@ -280,7 +390,7 @@ def _build_graph(data: dict) -> tuple[list[dict], list[dict]]:
         # Ensure both endpoints exist
         for eid in (src, tgt):
             if eid not in nodes_map:
-                nodes_map[eid] = _make_icij_node(eid, eid, [], {})
+                nodes_map[eid] = _make_icij_node(eid, _readable_label(eid), [], {})
         rel = e.get("relationship", "linked")
         key = (src, tgt, rel)
         if key not in seen_edges and src != tgt:
@@ -332,6 +442,15 @@ def _build_graph(data: dict) -> tuple[list[dict], list[dict]]:
     #    with the same name that weren't fully merged (e.g. different person)
     #    — skip, we already merged above.
 
+    # Normalize country codes to uppercase and deduplicate
+    for n in nodes_map.values():
+        if n.get("country_codes"):
+            n["country_codes"] = list(dict.fromkeys(
+                c.upper() for c in n["country_codes"] if c
+            ))
+        if n.get("jurisdiction"):
+            n["jurisdiction"] = n["jurisdiction"].upper()
+
     # Clean up internal keys
     for n in nodes_map.values():
         n.pop("_merged_count", None)
@@ -380,6 +499,55 @@ def _extract_investigation(description: str) -> str | None:
     return None
 
 
+def _readable_label(raw_id: str) -> str:
+    """Extract a human-readable label from a raw node ID."""
+    # Strip stale icij- prefix (edge resolver may prepend icij- to non-ICIJ IDs)
+    if raw_id.startswith("icij-uk-") or raw_id.startswith("icij-aleph-") or \
+       raw_id.startswith("icij-wikidata-") or raw_id.startswith("icij-land-") or \
+       raw_id.startswith("icij-gleif-") or raw_id.startswith("icij-sec-") or \
+       raw_id.startswith("icij-court-"):
+        raw_id = raw_id[len("icij-"):]
+    # uk-psc-12345678-mr-john-smith -> Mr John Smith
+    if raw_id.startswith("uk-psc-"):
+        suffix = raw_id[len("uk-psc-"):]
+        # Strip leading company number if present (digits followed by dash)
+        parts = suffix.split("-", 1)
+        if len(parts) > 1 and parts[0].isdigit():
+            suffix = parts[1]
+        return suffix.replace("-", " ").title()
+    # uk-12345678 -> Company 12345678
+    if raw_id.startswith("uk-"):
+        number = raw_id[len("uk-"):]
+        if number.replace("-", "").isdigit():
+            return f"Company {number}"
+        return number.replace("-", " ").title()
+    # aleph-abc123 -> Aleph Entity abc123
+    if raw_id.startswith("aleph-"):
+        return f"Aleph Entity {raw_id[len('aleph-'):]}"
+    # wikidata-Q12345 -> Wikidata Q12345
+    if raw_id.startswith("wikidata-"):
+        return f"Wikidata {raw_id[len('wikidata-'):]}"
+    # land-xxx -> Land Registry xxx
+    if raw_id.startswith("land-"):
+        return f"Land Registry {raw_id[len('land-'):]}"
+    # gleif-xxx -> GLEIF xxx
+    if raw_id.startswith("gleif-"):
+        return f"GLEIF {raw_id[len('gleif-'):]}"
+    # sec-xxx -> SEC xxx
+    if raw_id.startswith("sec-"):
+        return f"SEC {raw_id[len('sec-'):]}"
+    # court-xxx -> Court xxx
+    if raw_id.startswith("court-"):
+        return f"Court {raw_id[len('court-'):]}"
+    # icij-xxx -> strip prefix
+    if raw_id.startswith("icij-"):
+        return raw_id[len("icij-"):]
+    # os-xxx -> strip prefix
+    if raw_id.startswith("os-"):
+        return raw_id[len("os-"):]
+    return raw_id
+
+
 def _normalize_name(name: str) -> str:
     return re.sub(r"[^a-z ]", "", name.lower()).strip()
 
@@ -387,3 +555,137 @@ def _normalize_name(name: str) -> str:
 def _slugify(text: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return slug[:60] if slug else "investigation"
+
+
+def _generate_next_steps(
+    nodes: list[dict], edges: list[dict], data: dict,
+) -> list[dict]:
+    """Generate recommended next steps from the graph data.
+
+    Called as a fallback when the investigation skill hasn't provided
+    its own ``next_steps``.  Examines the actual findings to produce
+    specific, actionable recommendations.
+    """
+    steps: list[dict] = []
+    query = data.get("query", "the subject")
+    patterns = data.get("pattern_matches", [])
+
+    sanctioned = [n for n in nodes if n.get("sanctioned")]
+    peps = [n for n in nodes if n.get("pep")]
+    sources_found = {n.get("source") for n in nodes if n.get("source")}
+    countries = set()
+    for n in nodes:
+        for c in n.get("country_codes", []):
+            countries.add(c.upper() if c else "")
+    countries.discard("")
+
+    investigations = {
+        n.get("investigation")
+        for n in nodes
+        if n.get("investigation")
+    }
+    investigations.discard(None)
+
+    max_hop = max((n.get("hop", 0) for n in nodes), default=0)
+
+    # Sanctions exposure
+    if sanctioned:
+        names = ", ".join(n.get("label", "?") for n in sanctioned[:3])
+        extra = f" and {len(sanctioned) - 3} more" if len(sanctioned) > 3 else ""
+        steps.append({
+            "priority": "CRITICAL",
+            "title": "Legal/compliance review — active sanctions exposure",
+            "description": (
+                f"{len(sanctioned)} sanctioned entit{'ies' if len(sanctioned) > 1 else 'y'} "
+                f"identified: {names}{extra}. Consult legal counsel before any financial "
+                f"transactions or business relationships involving these entities."
+            ),
+        })
+
+    # PEP connections
+    if peps:
+        steps.append({
+            "priority": "HIGH",
+            "title": "Enhanced Due Diligence for PEP connections",
+            "description": (
+                f"{len(peps)} politically exposed person{'s' if len(peps) > 1 else ''} "
+                f"connected to this network. AML regulations require source-of-wealth "
+                f"verification, senior management approval, and ongoing monitoring."
+            ),
+        })
+
+    # Deeper traversal
+    if max_hop <= 2:
+        steps.append({
+            "priority": "RECOMMENDED",
+            "title": "Deepen the network trace",
+            "description": (
+                f"Current traversal reached {max_hop} hop{'s' if max_hop != 1 else ''}. "
+                f"Run with depth 3 and budget 100 to expand the perimeter — "
+                f"officers and intermediaries at the network edge may have significant "
+                f"connections not yet visible."
+            ),
+        })
+
+    # Cross-reference with associates
+    def _edge_id(val):
+        return val.get("id", val) if isinstance(val, dict) else val
+
+    high_degree = sorted(
+        [(n, sum(1 for e in edges if n["id"] in (
+            _edge_id(e.get("source", "")),
+            _edge_id(e.get("target", "")),
+        ))) for n in nodes if n.get("type") in ("Officer", "Person") and n.get("hop", 0) > 0],
+        key=lambda x: -x[1],
+    )
+    if high_degree:
+        top = high_degree[0][0]
+        steps.append({
+            "priority": "RECOMMENDED",
+            "title": f"Investigate {top.get('label', 'key officer')}",
+            "description": (
+                f"'{top.get('label', '?')}' is the most connected person in the network. "
+                f"Run a separate investigation to map their full offshore footprint and "
+                f"identify shared structures."
+            ),
+        })
+
+    # Missing sources
+    if "aleph" not in sources_found:
+        steps.append({
+            "priority": "RECOMMENDED",
+            "title": "Add OCCRP Aleph API key",
+            "description": (
+                "Aleph returned no results — it may require an API key for full access. "
+                "Register free at aleph.occrp.org and set ALEPH_API_KEY in .env. "
+                "Aleph contains investigative documents and leaked datasets that could "
+                "provide source documents for this investigation."
+            ),
+        })
+
+    # High-risk patterns
+    crit_patterns = [p for p in patterns if p.get("risk") in ("CRITICAL", "HIGH")]
+    if crit_patterns:
+        names = ", ".join(p.get("title", p.get("pattern", "")) for p in crit_patterns[:3])
+        steps.append({
+            "priority": "HIGH",
+            "title": "Investigate high-risk structural patterns",
+            "description": (
+                f"{len(crit_patterns)} high/critical risk pattern{'s' if len(crit_patterns) > 1 else ''} "
+                f"detected: {names}. These indicate structures commonly associated with "
+                f"money laundering or sanctions evasion. See the Reference tab for details."
+            ),
+        })
+
+    # Monitoring
+    steps.append({
+        "priority": "ONGOING",
+        "title": "Set up sanctions monitoring",
+        "description": (
+            f"Run periodic monitoring for {query} to detect new sanctions listings. "
+            f"Sanctions lists change daily — a clean screen today does not guarantee "
+            f"a clean screen tomorrow."
+        ),
+    })
+
+    return steps

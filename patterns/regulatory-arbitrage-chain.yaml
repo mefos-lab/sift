@@ -14,6 +14,13 @@ sources:
   - eu_amld_annex_iii
   - panama_papers
   - pandora_papers
+references:
+  - title: "FATF-Egmont — Concealment of Beneficial Ownership (2018)"
+    url: https://www.fatf-gafi.org/content/dam/fatf-gafi/reports/FATF-Egmont-Concealment-beneficial-ownership.pdf
+  - title: "EU Anti-Money Laundering Directive (AMLD5)"
+    url: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=celex%3A32018L0843
+  - title: "ICIJ Investigations — Panama Papers, Pandora Papers"
+    url: https://www.icij.org/investigations/
 
 detection:
   conditions:

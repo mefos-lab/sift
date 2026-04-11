@@ -12,6 +12,13 @@ sources:
   - network_analysis_aml_literature
   - fatf_trade_based_ml_2020
   - tigergraph_aml_analytics
+references:
+  - title: "Money Laundering Detection Using Neural Networks — Expert Systems with Applications (2021)"
+    url: https://doi.org/10.1016/j.eswa.2021.114470
+  - title: "FATF — Trade-Based Money Laundering (2020)"
+    url: https://www.fatf-gafi.org/content/dam/fatf-gafi/reports/Trade-Based-Money-Laundering-Trends-and-Developments.pdf
+  - title: "TigerGraph — Anti-Money Laundering Analytics"
+    url: https://www.tigergraph.com/solutions/anti-money-laundering-aml/
 
 detection:
   conditions:

@@ -86,7 +86,35 @@ When a NEW pattern is identified, propose adding it to the library.
 
 Use the mode-specific report template below.
 
-### Step 5: Visualization
+### Step 5: Generate next steps
+
+Based on the specific findings, generate a `next_steps` list and
+attach it to the investigation data dict before visualization.
+Each step is a dict with `priority`, `title`, and `description`.
+
+Priorities: `CRITICAL` (sanctions/legal exposure requiring
+immediate action), `HIGH` (enhanced due diligence, specific
+leads to pursue), `RECOMMENDED` (investigative actions that
+would deepen understanding), `ONGOING` (monitoring, verification).
+
+Next steps must be **specific to this investigation** — reference
+actual entity names, jurisdictions found, gaps in data, specific
+people or companies to investigate further, and concrete commands
+to run. Do not use generic boilerplate.
+
+Example:
+```python
+data["next_steps"] = [
+    {"priority": "CRITICAL", "title": "Legal review: OFAC exposure",
+     "description": "Isabel dos Santos is on the US Kleptocracy/HR visa list and UK FCDO sanctions. Any financial relationship requires immediate legal counsel."},
+    {"priority": "HIGH", "title": "Trace Sindika Dokolo network",
+     "description": "Run /investigate Isabel dos Santos, Sindika Dokolo to map shared offshore structures with her late husband."},
+    {"priority": "RECOMMENDED", "title": "Expand with Aleph API key",
+     "description": "Aleph returned no results — Luanda Leaks source documents are hosted there. Register at aleph.occrp.org and set ALEPH_API_KEY in .env."},
+]
+```
+
+### Step 6: Visualization
 
 After producing the report, ask:
 "Would you like an interactive network visualization?"
@@ -94,6 +122,7 @@ After producing the report, ask:
 If yes, the `deep_trace` result is already in the format expected by
 `sift.visualizer.generate_visualization()`. Pass it
 directly — it includes hop distances for visual encoding.
+The `next_steps` list will appear in the Reference tab.
 
 ---
 

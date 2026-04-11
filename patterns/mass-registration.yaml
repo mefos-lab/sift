@@ -12,6 +12,13 @@ sources:
   - moodys_shell_indicators
   - transparency_international
   - uk_nra_2025
+references:
+  - title: "Moody's — Seven Indicators of a Shell Company"
+    url: https://www.moodys.com/web/en/us/kyc/resources/insights/seven-indicators-shell-company-risk.html
+  - title: "Transparency International — Publications"
+    url: https://www.transparency.org/en/publications
+  - title: "UK National Risk Assessment of Money Laundering and Terrorist Financing"
+    url: https://www.gov.uk/government/publications/national-risk-assessment-of-money-laundering-and-terrorist-financing-2025
 
 detection:
   conditions:

@@ -1,9 +1,11 @@
 # Sift — Investigative Journalism MCP Server
 
 MCP server for financial crime investigation and investigative
-journalism. Cross-references 6 data sources: ICIJ Offshore Leaks,
+journalism. Cross-references 9 data sources: ICIJ Offshore Leaks,
 OpenSanctions, GLEIF LEI Registry, SEC EDGAR, UK Companies House,
-and CourtListener (US court records).
+CourtListener (US court records), OCCRP Aleph (investigative datasets),
+UK Land Registry (property transactions), and Wikidata (entity
+enrichment and PEP identification).
 
 ## Structure
 
@@ -23,6 +25,9 @@ and CourtListener (US court records).
 | SEC EDGAR | US public company filings, 10-K/10-Q/8-K | User-Agent only |
 | UK Companies House | UK company records, officers, PSC (beneficial ownership) | Free API key |
 | CourtListener | US federal court records (PACER/RECAP) | Free token |
+| OCCRP Aleph | Investigative datasets, company records, leaked documents | Optional API key |
+| UK Land Registry | Property transaction prices and addresses (England/Wales) | None |
+| Wikidata | Structured data on people, companies, political roles | None |
 
 ## Skill
 
@@ -107,11 +112,14 @@ OPENSANCTIONS_API_KEY=<your-key>          # Required — get from opensanctions.
 SEC_EDGAR_USER_AGENT=sift contact@you.com # Required — any name + email
 COMPANIES_HOUSE_API_KEY=<your-key>        # Optional — get from developer.company-information.service.gov.uk
 COURTLISTENER_API_TOKEN=<your-token>      # Optional — get from courtlistener.com/profile/api/
+ALEPH_API_KEY=<your-key>                  # Optional — get from aleph.occrp.org (register free)
 ```
 
-ICIJ, GLEIF, and SEC EDGAR work without keys. OpenSanctions requires
-a free API key. Companies House and CourtListener are optional — if
-keys are missing, those sources are silently skipped.
+ICIJ, GLEIF, SEC EDGAR, UK Land Registry, and Wikidata work without
+keys. OpenSanctions requires a free API key. Companies House,
+CourtListener, and OCCRP Aleph are optional — if keys are missing,
+those sources still work (Aleph has public access) or are silently
+skipped.
 
 ## Conventions
 

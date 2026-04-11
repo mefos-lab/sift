@@ -24,6 +24,9 @@ class PatternMatch:
     conditions_missed: list[str]
     evidence: list[str]
     description: str
+    sources: list[str] = field(default_factory=list)
+    status: str = ""
+    references: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -241,6 +244,9 @@ def _evaluate_pattern(pattern: dict, graph: _GraphIndex) -> PatternMatch | None:
         conditions_missed=missed,
         evidence=evidence,
         description=pattern.get("description", ""),
+        sources=pattern.get("sources", []),
+        status=pattern.get("status", ""),
+        references=pattern.get("references", []),
     )
 
 

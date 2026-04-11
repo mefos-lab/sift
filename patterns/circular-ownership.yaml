@@ -11,6 +11,13 @@ sources:
   - fatf_bo_concealment_2018
   - network_analysis_aml_literature
   - moodys_shell_indicators
+references:
+  - title: "FATF-Egmont — Concealment of Beneficial Ownership (2018)"
+    url: https://www.fatf-gafi.org/content/dam/fatf-gafi/reports/FATF-Egmont-Concealment-beneficial-ownership.pdf
+  - title: "Money Laundering Detection Using Neural Networks — Expert Systems with Applications (2021)"
+    url: https://doi.org/10.1016/j.eswa.2021.114470
+  - title: "Moody's — Seven Indicators of a Shell Company"
+    url: https://www.moodys.com/web/en/us/kyc/resources/insights/seven-indicators-shell-company-risk.html
 
 detection:
   conditions:

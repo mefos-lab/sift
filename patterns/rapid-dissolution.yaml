@@ -12,6 +12,13 @@ sources:
   - fincen_files
   - transparency_international_bottle_laundromat
   - uk_nra_2025
+references:
+  - title: "ICIJ — FinCEN Files Investigation"
+    url: https://www.icij.org/investigations/fincen-files/
+  - title: "Transparency International — Publications"
+    url: https://www.transparency.org/en/publications
+  - title: "UK National Risk Assessment of Money Laundering and Terrorist Financing"
+    url: https://www.gov.uk/government/publications/national-risk-assessment-of-money-laundering-and-terrorist-financing-2025
 
 detection:
   conditions:

@@ -1,4 +1,4 @@
-"""Tests for ICIJ and OpenSanctions API clients.
+"""Tests for API clients.
 
 Uses httpx mock transport to avoid hitting real APIs in tests.
 """
@@ -8,6 +8,9 @@ import pytest
 import httpx
 from sift.client import ICIJClient, INVESTIGATIONS, ENTITY_TYPES
 from sift.opensanctions_client import OpenSanctionsClient
+from sift.aleph_client import AlephClient
+from sift.land_registry_client import LandRegistryClient
+from sift.wikidata_client import WikidataClient
 
 
 # =============================================================================
@@ -24,12 +27,18 @@ class MockTransport(httpx.AsyncBaseTransport):
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         path = request.url.path
+        # Prefer longest (most specific) match
+        best_match = None
+        best_len = -1
         for pattern, response_data in self.routes.items():
-            if pattern in path:
-                return httpx.Response(
-                    status_code=response_data.get("status", 200),
-                    json=response_data.get("json", {}),
-                )
+            if pattern in path and len(pattern) > best_len:
+                best_match = response_data
+                best_len = len(pattern)
+        if best_match is not None:
+            return httpx.Response(
+                status_code=best_match.get("status", 200),
+                json=best_match.get("json", {}),
+            )
         return httpx.Response(status_code=404, json={"error": "not found"})
 
 
@@ -288,6 +297,367 @@ class TestOpenSanctionsClient:
             base_url="https://api.opensanctions.org",
             transport=transport,
         )
+        await c.search("test")
+        req = transport.requests[0]
+        assert "Authorization" not in req.headers
+        await c.close()
+
+
+# =============================================================================
+# OCCRP Aleph Client tests
+# =============================================================================
+
+class TestAlephClient:
+    @pytest.fixture
+    def mock_routes(self):
+        # Order matters: more specific paths first (MockTransport uses 'in')
+        return {
+            "/entities/abc123/similar": {
+                "json": {
+                    "total": 1,
+                    "results": [
+                        {
+                            "id": "def456",
+                            "schema": "Company",
+                            "properties": {"name": ["Test Corporation"]},
+                            "countries": ["bz"],
+                        },
+                    ],
+                },
+            },
+            "/entities/abc123": {
+                "json": {
+                    "id": "abc123",
+                    "schema": "Company",
+                    "properties": {
+                        "name": ["Test Corp"],
+                        "jurisdiction": ["pa"],
+                        "registrationNumber": ["12345"],
+                    },
+                    "countries": ["pa"],
+                    "collection_id": 42,
+                },
+            },
+            "/entities": {
+                "json": {
+                    "total": 2,
+                    "results": [
+                        {
+                            "id": "abc123",
+                            "schema": "Company",
+                            "properties": {"name": ["Test Corp"]},
+                            "countries": ["pa"],
+                            "collection_id": 42,
+                        },
+                    ],
+                },
+            },
+            "/collections": {
+                "json": {
+                    "total": 1,
+                    "results": [
+                        {
+                            "id": 42,
+                            "label": "Panama Papers",
+                            "category": "leak",
+                            "countries": ["pa"],
+                            "count": 100000,
+                            "summary": "Panama Papers source documents",
+                        },
+                    ],
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = AlephClient()
+        c._client = httpx.AsyncClient(
+            base_url="https://aleph.occrp.org/api/2",
+            transport=transport,
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_search_entities(self, client):
+        result = await client.search_entities("test")
+        assert result["total"] == 2
+        assert result["results"][0]["name"] == "Test Corp"
+        assert result["results"][0]["countries"] == ["pa"]
+
+    @pytest.mark.asyncio
+    async def test_search_entities_with_filters(self, client):
+        result = await client.search_entities(
+            "test", schema="Company", countries=["pa"], limit=5,
+        )
+        assert "results" in result
+
+    @pytest.mark.asyncio
+    async def test_get_entity(self, client):
+        result = await client.get_entity("abc123")
+        assert result["id"] == "abc123"
+        assert result["name"] == "Test Corp"
+        assert result["registration_number"] == "12345"
+
+    @pytest.mark.asyncio
+    async def test_get_entity_similar(self, client):
+        result = await client.get_entity_similar("abc123")
+        assert result["total"] == 1
+        assert result["results"][0]["name"] == "Test Corporation"
+
+    @pytest.mark.asyncio
+    async def test_search_collections(self, client):
+        result = await client.search_collections("panama")
+        assert result["total"] == 1
+        assert result["results"][0]["label"] == "Panama Papers"
+
+    @pytest.mark.asyncio
+    async def test_auth_header_set(self):
+        transport = MockTransport({"/entities": {"json": {"total": 0, "results": []}}})
+        c = AlephClient(api_key="test-key")
+        c._client._transport = transport
+        await c.search_entities("test")
+        req = transport.requests[0]
+        assert req.headers["Authorization"] == "ApiKey test-key"
+        await c.close()
+
+    @pytest.mark.asyncio
+    async def test_no_auth_without_key(self):
+        transport = MockTransport({"/entities": {"json": {"total": 0, "results": []}}})
+        c = AlephClient()
+        c._client = httpx.AsyncClient(
+            base_url="https://aleph.occrp.org/api/2",
+            transport=transport,
+        )
+        await c.search_entities("test")
+        req = transport.requests[0]
+        assert "Authorization" not in req.headers
+        await c.close()
+
+
+# =============================================================================
+# UK Land Registry Client tests
+# =============================================================================
+
+class TestLandRegistryClient:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/app/root/qonsole/query": {
+                "json": {
+                    "results": {
+                        "bindings": [
+                            {
+                                "transaction": {"value": "http://example.com/tx/1"},
+                                "amount": {"value": "500000"},
+                                "date": {"value": "2024-06-15"},
+                                "paon": {"value": "10"},
+                                "street": {"value": "DOWNING STREET"},
+                                "town": {"value": "LONDON"},
+                                "postcode": {"value": "SW1A 2AA"},
+                                "type": {"value": "http://example.com/terraced"},
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = LandRegistryClient()
+        c._client = httpx.AsyncClient(transport=transport)
+        return c
+
+    @pytest.mark.asyncio
+    async def test_search_price_paid(self, client):
+        result = await client.search_price_paid("DOWNING STREET")
+        assert result["total"] == 1
+        assert result["results"][0]["price"] == 500000
+        assert result["results"][0]["property_address"]["street"] == "DOWNING STREET"
+
+    @pytest.mark.asyncio
+    async def test_search_with_price_filters(self, client):
+        result = await client.search_price_paid(
+            "LONDON", min_price=100000, max_price=1000000,
+        )
+        assert "results" in result
+
+    @pytest.mark.asyncio
+    async def test_search_with_property_type(self, client):
+        result = await client.search_price_paid(
+            "LONDON", property_type="terraced",
+        )
+        assert "results" in result
+
+    @pytest.mark.asyncio
+    async def test_search_postcode(self, client):
+        result = await client.search_postcode("SW1A 2AA")
+        assert result["total"] == 1
+        assert result["results"][0]["property_address"]["postcode"] == "SW1A 2AA"
+
+    @pytest.mark.asyncio
+    async def test_normalize_transaction_types(self, client):
+        result = await client.search_price_paid("test")
+        assert result["results"][0]["property_type"] == "Terraced"
+
+    @pytest.mark.asyncio
+    async def test_normalize_empty_optional_fields(self):
+        """Missing optional fields should normalize to empty strings."""
+        from sift.land_registry_client import _normalize_transaction
+        binding = {
+            "transaction": {"value": "http://example.com/tx/1"},
+            "amount": {"value": "100000"},
+            "date": {"value": "2024-01-01"},
+            "paon": {"value": "1"},
+            "street": {"value": "TEST ST"},
+            "town": {"value": "TESTTOWN"},
+            "postcode": {"value": "AB1 2CD"},
+            "type": {"value": "detached"},
+        }
+        result = _normalize_transaction(binding)
+        assert result["property_address"]["saon"] == ""
+        assert result["property_address"]["county"] == ""
+        assert result["new_build"] is None
+
+
+# =============================================================================
+# Wikidata Client tests
+# =============================================================================
+
+class TestWikidataClient:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/w/api.php": {
+                "json": {
+                    "search": [
+                        {
+                            "id": "Q937",
+                            "label": "Albert Einstein",
+                            "description": "German-born theoretical physicist",
+                            "concepturi": "http://www.wikidata.org/entity/Q937",
+                        },
+                    ],
+                    # wbgetentities response — same route, different action
+                    "entities": {
+                        "Q937": {
+                            "id": "Q937",
+                            "labels": {"en": {"value": "Albert Einstein"}},
+                            "descriptions": {"en": {"value": "German-born theoretical physicist"}},
+                            "aliases": {"en": [{"value": "Einstein"}]},
+                            "claims": {
+                                "P27": [{
+                                    "mainsnak": {
+                                        "datavalue": {
+                                            "type": "wikibase-entityid",
+                                            "value": {"id": "Q183"},
+                                        },
+                                    },
+                                }],
+                                "P569": [{
+                                    "mainsnak": {
+                                        "datavalue": {
+                                            "type": "time",
+                                            "value": {"time": "+1879-03-14T00:00:00Z"},
+                                        },
+                                    },
+                                }],
+                            },
+                        },
+                    },
+                    # wbgetclaims response
+                    "claims": {
+                        "P27": [{
+                            "mainsnak": {
+                                "datavalue": {
+                                    "type": "wikibase-entityid",
+                                    "value": {"id": "Q183"},
+                                },
+                            },
+                        }],
+                    },
+                },
+            },
+            "/sparql": {
+                "json": {
+                    "results": {
+                        "bindings": [
+                            {
+                                "position": {"value": "http://www.wikidata.org/entity/Q123"},
+                                "positionLabel": {"value": "President"},
+                                "start": {"value": "2020-01-01"},
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = WikidataClient()
+        c._client = httpx.AsyncClient(transport=transport)
+        return c
+
+    @pytest.mark.asyncio
+    async def test_search(self, client):
+        result = await client.search("Einstein")
+        assert result["total"] == 1
+        assert result["results"][0]["id"] == "Q937"
+        assert result["results"][0]["label"] == "Albert Einstein"
+
+    @pytest.mark.asyncio
+    async def test_search_with_limit(self, client):
+        result = await client.search("Einstein", limit=5)
+        assert "results" in result
+
+    @pytest.mark.asyncio
+    async def test_get_entity(self, client):
+        result = await client.get_entity("Q937")
+        assert result["id"] == "Q937"
+        assert result["label"] == "Albert Einstein"
+        assert "country_of_citizenship" in result
+        assert result["country_of_citizenship"] == ["Q183"]
+
+    @pytest.mark.asyncio
+    async def test_get_entity_date_property(self, client):
+        result = await client.get_entity("Q937")
+        assert "date_of_birth" in result
+        assert "+1879-03-14T00:00:00Z" in result["date_of_birth"]
+
+    @pytest.mark.asyncio
+    async def test_get_entity_aliases(self, client):
+        result = await client.get_entity("Q937")
+        assert "Einstein" in result["aliases"]
+
+    @pytest.mark.asyncio
+    async def test_get_claims(self, client):
+        result = await client.get_claims("Q937", property_id="P27")
+        assert "P27" in result
+
+    @pytest.mark.asyncio
+    async def test_sparql(self, client):
+        result = await client.sparql("SELECT ?x WHERE { ?x ?y ?z } LIMIT 1")
+        assert result["total"] == 1
+
+    @pytest.mark.asyncio
+    async def test_get_pep_info(self, client):
+        result = await client.get_pep_info("Q937")
+        assert result["total"] == 1
+        assert result["results"][0]["positionLabel"] == "President"
+
+    @pytest.mark.asyncio
+    async def test_no_auth_required(self):
+        """Wikidata requires no authentication."""
+        transport = MockTransport({
+            "/w/api.php": {"json": {"search": []}},
+        })
+        c = WikidataClient()
+        c._client = httpx.AsyncClient(transport=transport)
         await c.search("test")
         req = transport.requests[0]
         assert "Authorization" not in req.headers

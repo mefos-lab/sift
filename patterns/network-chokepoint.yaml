@@ -12,6 +12,11 @@ status: CONFIRMED
 sources:
   - network_analysis_aml_literature
   - aml_graph_analytics
+references:
+  - title: "Money Laundering Detection Using Neural Networks — Expert Systems with Applications (2021)"
+    url: https://doi.org/10.1016/j.eswa.2021.114470
+  - title: "TigerGraph — Anti-Money Laundering Analytics"
+    url: https://www.tigergraph.com/solutions/anti-money-laundering-aml/
 
 detection:
   conditions:

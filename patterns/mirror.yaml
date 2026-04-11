@@ -10,6 +10,11 @@ status: CONFIRMED
 sources:
   - panama_papers
   - pandora_papers
+references:
+  - title: "ICIJ Investigations — Panama Papers"
+    url: https://www.icij.org/investigations/
+  - title: "ICIJ Investigations — Pandora Papers"
+    url: https://www.icij.org/investigations/
 
 detection:
   conditions:

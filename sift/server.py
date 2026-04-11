@@ -15,6 +15,9 @@ from .gleif_client import GLEIFClient
 from .sec_client import SECEdgarClient
 from .companies_house_client import CompaniesHouseClient
 from .courtlistener_client import CourtListenerClient
+from .aleph_client import AlephClient
+from .land_registry_client import LandRegistryClient
+from .wikidata_client import WikidataClient
 from .traversal import traverse, result_to_visualizer_data
 from .export import export_json, export_markdown
 from .query_router import route_query
@@ -55,6 +58,13 @@ ch_client = CompaniesHouseClient(api_key=_ch_key) if _ch_key else None
 
 _cl_token = os.environ.get("COURTLISTENER_API_TOKEN", "").strip()
 cl_client = CourtListenerClient(api_token=_cl_token) if _cl_token else None
+
+_aleph_key = os.environ.get("ALEPH_API_KEY", "").strip()
+aleph_client = AlephClient(api_key=_aleph_key) if _aleph_key else AlephClient()
+
+# No auth required
+land_registry_client = LandRegistryClient()
+wikidata_client = WikidataClient()
 
 OPENSANCTIONS_TOPICS = [
     "sanction", "debarment", "crime", "crime.fin", "crime.terror",
@@ -817,11 +827,12 @@ async def list_tools() -> list[Tool]:
             name="background_check",
             description=(
                 "Comprehensive due diligence on a person or company. Searches all "
-                "6 data sources in parallel: ICIJ Offshore Leaks (offshore entities), "
+                "9 data sources in parallel: ICIJ Offshore Leaks (offshore entities), "
                 "OpenSanctions (sanctions/PEP status), GLEIF (corporate affiliations), "
                 "SEC EDGAR (US filings and enforcement), UK Companies House "
-                "(UK directorships and PSC control), and CourtListener (US court "
-                "cases). Returns a unified profile with risk indicators."
+                "(UK directorships and PSC control), CourtListener (US court "
+                "cases), OCCRP Aleph (investigative datasets), and Wikidata "
+                "(entity enrichment/PEP). Returns a unified profile with risk indicators."
             ),
             inputSchema={
                 "type": "object",
@@ -906,18 +917,270 @@ async def list_tools() -> list[Tool]:
         ),
 
         # =================================================================
+        # OCCRP Aleph tools
+        # =================================================================
+        Tool(
+            name="aleph_search",
+            description=(
+                "Search OCCRP Aleph for entities across investigative datasets — "
+                "company records, court filings, leaked documents from dozens of "
+                "countries. Covers Panama Papers source docs, FinCEN Files, and "
+                "hundreds of other datasets."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Name or keyword to search for",
+                    },
+                    "schema": {
+                        "type": "string",
+                        "enum": ["Person", "Company", "Organization", "LegalEntity",
+                                 "Thing", "Document"],
+                        "description": "Entity type filter (optional)",
+                    },
+                    "countries": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "ISO country codes to filter by (optional)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Max results (default 10)",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="aleph_entity",
+            description=(
+                "Get full details on an OCCRP Aleph entity by ID — includes "
+                "registration numbers, addresses, jurisdiction, source dataset, "
+                "and associated documents."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "The Aleph entity ID",
+                    },
+                },
+                "required": ["entity_id"],
+            },
+        ),
+        Tool(
+            name="aleph_similar",
+            description=(
+                "Find entities similar to a given Aleph entity — useful for "
+                "cross-referencing and finding the same person or company "
+                "across different leaked datasets."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "The Aleph entity ID to cross-reference",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Max similar entities to return (default 10)",
+                    },
+                },
+                "required": ["entity_id"],
+            },
+        ),
+        Tool(
+            name="aleph_collections",
+            description=(
+                "Search OCCRP Aleph datasets and investigations by keyword. "
+                "Returns available collections with entity counts and country "
+                "coverage — useful for finding relevant source datasets."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Keyword to search collections for",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Max results (default 10)",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+
+        # =================================================================
+        # UK Land Registry tools
+        # =================================================================
+        Tool(
+            name="land_search",
+            description=(
+                "Search UK HM Land Registry Price Paid Data for property "
+                "transactions by street, town, or postcode. Returns transaction "
+                "prices, dates, property types, and addresses. Useful for "
+                "tracing real estate purchases — a key laundering endpoint."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Street name, town, or postcode to search",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Max results (default 20)",
+                    },
+                    "min_price": {
+                        "type": "integer",
+                        "description": "Minimum transaction price filter (optional)",
+                    },
+                    "max_price": {
+                        "type": "integer",
+                        "description": "Maximum transaction price filter (optional)",
+                    },
+                    "property_type": {
+                        "type": "string",
+                        "enum": ["detached", "semi-detached", "terraced", "flat"],
+                        "description": "Property type filter (optional)",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="land_postcode",
+            description=(
+                "Get all property transactions for a UK postcode. Returns "
+                "the full transaction history — prices, dates, and property "
+                "details. Use this when you have a specific postcode from "
+                "a company registration or address."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "postcode": {
+                        "type": "string",
+                        "description": "UK postcode (e.g. 'SW1A 1AA')",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Max results (default 50)",
+                    },
+                },
+                "required": ["postcode"],
+            },
+        ),
+
+        # =================================================================
+        # Wikidata tools
+        # =================================================================
+        Tool(
+            name="wikidata_search",
+            description=(
+                "Search Wikidata for people, companies, and organizations. "
+                "Returns Wikidata IDs with labels and descriptions. Use this "
+                "for entity enrichment — confirming identities, finding "
+                "nationalities, political roles, and corporate relationships."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Name to search for",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Max results (default 10)",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="wikidata_entity",
+            description=(
+                "Get full Wikidata entity details — nationality, date of birth, "
+                "political positions, employer, board memberships, corporate "
+                "ownership, and more. Critical for PEP identification and "
+                "entity enrichment across sources."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "Wikidata entity ID (e.g. 'Q937' for Albert Einstein)",
+                    },
+                },
+                "required": ["entity_id"],
+            },
+        ),
+        Tool(
+            name="wikidata_pep_check",
+            description=(
+                "Check if a person holds or held political positions via "
+                "Wikidata. Returns political offices with start/end dates. "
+                "Complements OpenSanctions PEP data with historical positions "
+                "and lower-profile political roles."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "Wikidata entity ID of the person to check",
+                    },
+                },
+                "required": ["entity_id"],
+            },
+        ),
+        Tool(
+            name="wikidata_sparql",
+            description=(
+                "Execute a custom SPARQL query against Wikidata. For advanced "
+                "queries like finding all board members of a company, all "
+                "politicians from a jurisdiction, or corporate ownership chains."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "SPARQL query to execute",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+
+        # =================================================================
         # Deep traversal tool
         # =================================================================
         Tool(
             name="deep_trace",
             description=(
-                "Multi-hop network traversal across ICIJ and OpenSanctions. "
+                "Multi-hop network traversal across all 9 data sources. "
                 "Starts from one or more names, expands outward 1-3 hops, "
                 "finding connected entities, officers, intermediaries, and "
-                "sanctions exposure at each level. Returns the full graph "
-                "with hop distances, cross-source links, and pruning notes. "
-                "Use this for deep investigations that go beyond surface-level "
-                "name matching."
+                "sanctions exposure at each level. Searches ICIJ, OpenSanctions, "
+                "GLEIF, SEC, Companies House, CourtListener, OCCRP Aleph, "
+                "and Wikidata. Returns the full graph with hop distances, "
+                "cross-source links, and pruning notes."
             ),
             inputSchema={
                 "type": "object",
@@ -977,6 +1240,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                  "sanctions_batch_match", "sanctions_algorithms", "sanctions_monitor"}
     _ch_tools = {"uk_search", "uk_company", "uk_officer_appointments"}
     _cl_tools = {"court_search", "court_docket"}
+
+    global _last_investigation
 
     if name in _os_tools and os_client is None:
         return _not_configured("OpenSanctions", "OPENSANCTIONS_API_KEY")
@@ -1227,6 +1492,68 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "court_docket":
             result = await cl_client.get_docket(arguments["docket_id"])
+
+        # =============================================================
+        # OCCRP Aleph tools
+        # =============================================================
+        elif name == "aleph_search":
+            result = await aleph_client.search_entities(
+                query=arguments["query"],
+                schema=arguments.get("schema"),
+                countries=arguments.get("countries"),
+                limit=arguments.get("limit", 10),
+            )
+
+        elif name == "aleph_entity":
+            result = await aleph_client.get_entity(arguments["entity_id"])
+
+        elif name == "aleph_similar":
+            result = await aleph_client.get_entity_similar(
+                entity_id=arguments["entity_id"],
+                limit=arguments.get("limit", 10),
+            )
+
+        elif name == "aleph_collections":
+            result = await aleph_client.search_collections(
+                query=arguments["query"],
+                limit=arguments.get("limit", 10),
+            )
+
+        # =============================================================
+        # UK Land Registry tools
+        # =============================================================
+        elif name == "land_search":
+            result = await land_registry_client.search_price_paid(
+                query=arguments["query"],
+                limit=arguments.get("limit", 20),
+                min_price=arguments.get("min_price"),
+                max_price=arguments.get("max_price"),
+                property_type=arguments.get("property_type"),
+            )
+
+        elif name == "land_postcode":
+            result = await land_registry_client.search_postcode(
+                postcode=arguments["postcode"],
+                limit=arguments.get("limit", 50),
+            )
+
+        # =============================================================
+        # Wikidata tools
+        # =============================================================
+        elif name == "wikidata_search":
+            result = await wikidata_client.search(
+                query=arguments["query"],
+                limit=arguments.get("limit", 10),
+            )
+
+        elif name == "wikidata_entity":
+            result = await wikidata_client.get_entity(arguments["entity_id"])
+
+        elif name == "wikidata_pep_check":
+            result = await wikidata_client.get_pep_info(arguments["entity_id"])
+
+        elif name == "wikidata_sparql":
+            result = await wikidata_client.sparql(arguments["query"])
 
         # =============================================================
         # Natural language query
@@ -1513,7 +1840,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             query_name = arguments["name"]
             country = arguments.get("country")
 
-            # Search all 6 sources in parallel
+            # Search all 9 sources in parallel
             os_kwargs = {"query": query_name, "limit": 5}
             if country:
                 os_kwargs["countries"] = [country]
@@ -1527,6 +1854,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 sec_client.search(query_name, count=5),
                 ch_client.search_company(query_name, items_per_page=5) if ch_client else _noop(),
                 cl_client.search(query_name, type="r") if cl_client else _noop(),
+                aleph_client.search_entities(query_name, limit=5),
+                wikidata_client.search(query_name, limit=5),
+                _noop(),  # land_registry placeholder (address-based, not name-based)
                 return_exceptions=True,
             )
 
@@ -1632,6 +1962,36 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         } for h in hits],
                     }
 
+            # OCCRP Aleph
+            aleph_r = _safe(6)
+            if aleph_r:
+                hits = aleph_r.get("results", [])[:5]
+                if hits:
+                    profile["sources"]["aleph"] = {
+                        "count": aleph_r.get("total", len(hits)),
+                        "results": [{
+                            "name": h.get("name", ""),
+                            "schema": h.get("schema", ""),
+                            "countries": h.get("countries", []),
+                            "jurisdiction": h.get("jurisdiction", ""),
+                            "datasets": h.get("datasets", []),
+                        } for h in hits],
+                    }
+
+            # Wikidata
+            wd_r = _safe(7)
+            if wd_r:
+                hits = wd_r.get("results", [])[:5]
+                if hits:
+                    profile["sources"]["wikidata"] = {
+                        "count": wd_r.get("total", len(hits)),
+                        "results": [{
+                            "id": h.get("id", ""),
+                            "label": h.get("label", ""),
+                            "description": h.get("description", ""),
+                        } for h in hits],
+                    }
+
             # Risk summary
             sources_found = list(profile["sources"].keys())
             profile["risk_indicators"] = {
@@ -1652,7 +2012,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = profile
 
             # Save for export
-            global _last_investigation
             _last_investigation = result
 
         elif name == "deep_trace":
@@ -1674,6 +2033,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 sec_client=sec_client,
                 ch_client=ch_client,
                 cl_client=cl_client,
+                aleph_client=aleph_client,
+                wikidata_client=wikidata_client,
+                land_registry_client=land_registry_client,
             )
 
             result = result_to_visualizer_data(traversal_result, ", ".join(names))
@@ -1684,7 +2046,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 result["pattern_matches"] = traversal_result.pattern_matches
 
             # Save for export
-            global _last_investigation
             _last_investigation = result
 
         else:

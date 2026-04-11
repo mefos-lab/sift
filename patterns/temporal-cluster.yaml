@@ -13,6 +13,11 @@ sources:
   - shell_company_network_springer_2023
   - panama_papers
   - pandora_papers
+references:
+  - title: "FATF-Egmont — Concealment of Beneficial Ownership (2018)"
+    url: https://www.fatf-gafi.org/content/dam/fatf-gafi/reports/FATF-Egmont-Concealment-beneficial-ownership.pdf
+  - title: "ICIJ Investigations — Panama Papers, Pandora Papers"
+    url: https://www.icij.org/investigations/
 
 detection:
   conditions:
