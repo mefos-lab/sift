@@ -16,6 +16,7 @@ from .sec_client import SECEdgarClient
 from .companies_house_client import CompaniesHouseClient
 from .courtlistener_client import CourtListenerClient
 from .traversal import traverse, result_to_visualizer_data
+from .export import export_json, export_markdown
 
 
 def _load_env():
@@ -835,6 +836,48 @@ async def list_tools() -> list[Tool]:
         ),
 
         # =================================================================
+        # Export tools
+        # =================================================================
+        Tool(
+            name="export_json",
+            description=(
+                "Export the most recent investigation results as structured JSON. "
+                "Includes all entities, edges, pattern matches, confidence and "
+                "risk scores, and metadata. Pass the investigation data from a "
+                "prior deep_trace call."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "investigation_data": {
+                        "type": "object",
+                        "description": "The investigation data dict from a deep_trace result",
+                    },
+                },
+                "required": ["investigation_data"],
+            },
+        ),
+        Tool(
+            name="export_report",
+            description=(
+                "Export investigation results as a Markdown report suitable for "
+                "editorial review. Structured as a story memo: headline, key "
+                "entities with risk scores, pattern analysis, and source attribution. "
+                "Pass the investigation data from a prior deep_trace call."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "investigation_data": {
+                        "type": "object",
+                        "description": "The investigation data dict from a deep_trace result",
+                    },
+                },
+                "required": ["investigation_data"],
+            },
+        ),
+
+        # =================================================================
         # Deep traversal tool
         # =================================================================
         Tool(
@@ -1156,6 +1199,17 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "court_docket":
             result = await cl_client.get_docket(arguments["docket_id"])
+
+        # =============================================================
+        # Export tools
+        # =============================================================
+        elif name == "export_json":
+            path = export_json(arguments["investigation_data"])
+            result = {"exported": str(path), "format": "json"}
+
+        elif name == "export_report":
+            path = export_markdown(arguments["investigation_data"])
+            result = {"exported": str(path), "format": "markdown"}
 
         # =============================================================
         # Compound investigation tools
