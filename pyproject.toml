@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "open-investigator"
-version = "0.3.0"
-description = "MCP server for financial investigations — ICIJ Offshore Leaks + OpenSanctions"
+name = "sift"
+version = "0.4.0"
+description = "MCP server for investigative journalism — cross-references offshore leaks, sanctions, corporate registries, SEC filings, and court records"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["open_investigator"]
+packages = ["sift"]
 
 [project.scripts]
-open-investigator = "open_investigator.server:main"
+sift = "sift.server:main"

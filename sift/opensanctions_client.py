@@ -1,5 +1,7 @@
 """OpenSanctions API client."""
 
+from __future__ import annotations
+
 import httpx
 from typing import Any
 
@@ -10,7 +12,7 @@ class OpenSanctionsClient:
     """Async client for the OpenSanctions API."""
 
     def __init__(self, api_key: str | None = None, timeout: float = 30.0):
-        headers = {"User-Agent": "offshore-investigator/0.1.0"}
+        headers = {"User-Agent": "sift/0.4.0"}
         if api_key:
             headers["Authorization"] = f"ApiKey {api_key}"
         self._client = httpx.AsyncClient(

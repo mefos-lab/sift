@@ -1,30 +1,48 @@
-# ICIJ MCP — Offshore Leaks Investigation Server
+# Sift — Investigative Journalism MCP Server
 
-MCP server wrapping the ICIJ Offshore Leaks Database API. Provides
-search, entity lookup, network traversal, and pattern detection across
-810,000+ offshore entities from 5 major leak investigations.
+MCP server for financial crime investigation and investigative
+journalism. Cross-references 6 data sources: ICIJ Offshore Leaks,
+OpenSanctions, GLEIF LEI Registry, SEC EDGAR, UK Companies House,
+and CourtListener (US court records).
 
 ## Structure
 
-- `open_investigator/` — MCP server and API client
-- `.claude/skills/` — Investigative skills (slash commands)
+- `sift/` — MCP server, API clients, traversal engine, visualizer
+- `.claude/skills/` — Investigation skill (slash command)
 - `patterns/` — Documented offshore structure patterns (accumulated over investigations)
-- `investigations/` — Saved investigation reports (optional — for persistent research)
+- `visualizations/` — D3 HTML template for interactive investigation visualizations
+- `investigations/` — Generated investigation reports and visualizations
 
-## Skills
+## Data Sources
 
-All skills search both ICIJ and OpenSanctions, cross-referencing
-offshore structures with sanctions exposure.
+| Source | Coverage | Auth |
+|--------|----------|------|
+| ICIJ Offshore Leaks | 810K+ entities from 5 leak investigations | None |
+| OpenSanctions | 320+ sanctions lists, PEP databases, enforcement records | API key |
+| GLEIF LEI Registry | Global corporate identifiers + ownership chains | None |
+| SEC EDGAR | US public company filings, 10-K/10-Q/8-K | User-Agent only |
+| UK Companies House | UK company records, officers, PSC (beneficial ownership) | Free API key |
+| CourtListener | US federal court records (PACER/RECAP) | Free token |
 
-- `/investigate <name>` — Unified intelligence summary (offshore + sanctions)
-- `/trace-network <name>` — Walk the graph outward, flag sanctioned nodes
-- `/find-patterns <name(s)>` — Structural pattern analysis with sanctions overlay
-- `/compare <name1>, <name2>` — Find shared connections and sanctions links
-- `/exposure-report <names>` — Batch dual-source due-diligence screening
-- `/jurisdiction-check <name>` — Jurisdictional footprint with sanctions cross-ref
-- `/monitor <name>` — Check for new sanctions listings since a date
-- `/compliance-screen <name>` — Rigorous structured sanctions/PEP screening
-- `/cross-reference <name>` — The master skill: full investigation across all sources
+## Skill
+
+One unified skill with modes:
+
+```
+/investigate <name>                          — full cross-reference (default)
+/investigate <name> --trace                  — multi-hop network traversal
+/investigate <name> --trace --depth 3        — deep network walk (3 hops)
+/investigate <name> --patterns               — structural pattern analysis
+/investigate <name> --compliance             — rigorous sanctions/PEP screening
+/investigate <name> --monitor                — check for new sanctions listings
+/investigate <name> --jurisdiction           — jurisdictional footprint
+/investigate <name1>, <name2>                — find connections between subjects
+/investigate <name1>, <name2>, <name3>, ...  — merged network, find shared links
+```
+
+All modes search ICIJ, OpenSanctions, and (when available) GLEIF, SEC,
+Companies House, and CourtListener. Cross-references findings, detects
+structural patterns, and offers interactive D3 network visualization.
 
 ## Pattern Library
 
@@ -64,8 +82,7 @@ and node IDs where available]
 
 ### Using patterns during investigation
 
-All investigative skills (`/investigate`, `/find-patterns`,
-`/trace-network`) should:
+`/investigate` (all modes) should:
 
 1. Load `patterns/INDEX.md` before producing output
 2. Cross-reference findings against known patterns

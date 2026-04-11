@@ -1,0 +1,1760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Investigation Visualization</title>
+<script>__D3_INLINE__</script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2129;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-dim: #484f58;
+    --icij-color: #58a6ff;
+    --os-color: #f0883e;
+    --both-color: #bc8cff;
+    --sanction-color: #f85149;
+    --pep-color: #d29922;
+    --rca-color: #db61a2;
+    --gleif-color: #3fb950;
+    --sec-color: #39d2c0;
+    --uk-color: #a78bfa;
+    --court-color: #f97583;
+    --edge-color: #30363d;
+    --accent-green: #3fb950;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header h1 { font-size: 18px; font-weight: 600; }
+  .header h1 span { color: var(--text-muted); font-weight: 400; font-size: 14px; }
+  .header-controls { display: flex; gap: 10px; align-items: center; }
+  .header-controls label {
+    font-size: 12px; color: var(--text-muted); display: flex;
+    align-items: center; gap: 4px; cursor: pointer;
+  }
+  .header-controls input[type="checkbox"] { accent-color: var(--icij-color); }
+  .search-input {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 5px 10px; border-radius: 6px; font-size: 12px; width: 200px;
+  }
+  .search-input::placeholder { color: var(--text-dim); }
+
+  /* Executive summary */
+  .exec-summary {
+    padding: 20px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .summary-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .summary-card.critical { border-color: var(--sanction-color); }
+  .summary-card.warning { border-color: var(--pep-color); }
+  .summary-card.info { border-color: var(--icij-color); }
+  .summary-card .card-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--text-muted); margin-bottom: 6px;
+  }
+  .summary-card .card-value {
+    font-size: 28px; font-weight: 700; line-height: 1;
+  }
+  .summary-card .card-detail {
+    font-size: 12px; color: var(--text-muted); margin-top: 6px;
+    line-height: 1.5;
+  }
+  .findings-narrative {
+    font-size: 13px; color: var(--text-muted); line-height: 1.7;
+    max-width: 900px;
+  }
+  .findings-narrative strong { color: var(--text); }
+  .findings-narrative .flag-sanction { color: var(--sanction-color); font-weight: 600; }
+  .findings-narrative .flag-pep { color: var(--pep-color); font-weight: 600; }
+  .findings-narrative .flag-cross { color: var(--both-color); font-weight: 600; }
+
+  /* Tab navigation */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    padding: 0 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-btn {
+    padding: 10px 20px; font-size: 13px; font-weight: 500;
+    color: var(--text-muted); background: none; border: none;
+    border-bottom: 2px solid transparent; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--icij-color); border-bottom-color: var(--icij-color); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Network graph view */
+  .graph-container {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    height: 650px;
+  }
+  .graph-panel { position: relative; overflow: hidden; height: 650px; min-height: 650px; }
+  .graph-panel svg { width: 100%; height: 100%; display: block; }
+
+  /* Sidebar */
+  .sidebar {
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    overflow-y: auto;
+    padding: 16px;
+  }
+  .sidebar h2 {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 12px;
+  }
+  .sidebar h3 {
+    font-size: 11px; font-weight: 600; color: var(--text-dim);
+    margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .jurisdiction-bar {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 4px; cursor: pointer; padding: 3px 4px; border-radius: 4px;
+  }
+  .jurisdiction-bar:hover { background: rgba(255,255,255,0.05); }
+  .jurisdiction-bar .code { font-size: 12px; font-weight: 600; width: 32px; flex-shrink: 0; }
+  .jurisdiction-bar .bar { height: 16px; border-radius: 2px; min-width: 2px; }
+  .jurisdiction-bar .count { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+
+  /* Detail panel */
+  .detail-panel {
+    position: absolute; top: 16px; left: 16px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px; max-width: 380px;
+    max-height: 70vh; overflow-y: auto; font-size: 13px;
+    display: none; z-index: 10; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .detail-panel.visible { display: block; }
+  .detail-panel .close-btn {
+    position: absolute; top: 8px; right: 10px; background: none;
+    border: none; color: var(--text-muted); cursor: pointer;
+    font-size: 18px; line-height: 1;
+  }
+  .detail-panel .close-btn:hover { color: var(--text); }
+  .detail-panel h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; padding-right: 24px; }
+  .detail-panel .meta { color: var(--text-muted); font-size: 12px; margin-bottom: 12px; }
+  .detail-panel .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+  .detail-panel .context-note {
+    font-size: 12px; color: var(--text-muted); line-height: 1.5;
+    padding: 8px 10px; background: var(--bg); border-radius: 6px;
+    margin: 10px 0; border-left: 3px solid var(--icij-color);
+  }
+  .detail-panel .context-note.warning { border-left-color: var(--sanction-color); }
+  .tag {
+    font-size: 10px; font-weight: 600; padding: 2px 6px;
+    border-radius: 10px; text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .tag.sanction { background: rgba(248,81,73,0.2); color: var(--sanction-color); }
+  .tag.pep { background: rgba(210,153,34,0.2); color: var(--pep-color); }
+  .tag.rca { background: rgba(219,97,162,0.2); color: var(--rca-color); }
+  .tag.icij { background: rgba(88,166,255,0.15); color: var(--icij-color); }
+  .tag.os { background: rgba(240,136,62,0.15); color: var(--os-color); }
+  .tag.both-tag { background: rgba(188,140,255,0.15); color: var(--both-color); }
+  .detail-row {
+    display: flex; justify-content: space-between; padding: 4px 0;
+    border-bottom: 1px solid var(--border); font-size: 12px;
+  }
+  .detail-row .label { color: var(--text-muted); }
+  .conn-item {
+    font-size: 12px; padding: 3px 0; color: var(--icij-color); cursor: pointer;
+  }
+  .conn-item:hover { text-decoration: underline; }
+
+  /* Jurisdiction flow view */
+  .flow-container {
+    padding: 24px;
+    min-height: 400px;
+    overflow-x: auto;
+  }
+  .flow-container svg { min-width: 100%; }
+
+  /* Timeline view */
+  .timeline-container {
+    padding: 24px;
+  }
+  .timeline-section {
+    margin-bottom: 32px;
+  }
+  .timeline-section h3 {
+    font-size: 14px; font-weight: 600; margin-bottom: 8px;
+  }
+  .timeline-section .explanation {
+    font-size: 12px; color: var(--text-muted); margin-bottom: 16px;
+    line-height: 1.6; max-width: 700px;
+  }
+  .timeline-section svg { width: 100%; }
+
+  /* Source matrix view */
+  .matrix-container {
+    padding: 24px;
+  }
+  .matrix-table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+  }
+  .matrix-table th {
+    text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--text-muted);
+  }
+  .matrix-table td {
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .matrix-table tr:hover { background: rgba(255,255,255,0.02); }
+  .matrix-table .name-cell { font-weight: 600; }
+  .matrix-table .source-badge {
+    font-size: 10px; font-weight: 600; padding: 2px 6px;
+    border-radius: 4px; display: inline-block; margin: 1px 2px;
+  }
+  .source-badge.icij { background: rgba(88,166,255,0.15); color: var(--icij-color); }
+  .source-badge.os { background: rgba(240,136,62,0.15); color: var(--os-color); }
+
+  /* Legend */
+  .legend { margin-top: 20px; }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 5px; font-size: 11px; color: var(--text-muted);
+  }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-swatch.rect { border-radius: 2px; }
+  .legend-swatch.diamond { width: 8px; height: 8px; transform: rotate(45deg); }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; font-size: 12px;
+    pointer-events: none; opacity: 0; transition: opacity 0.15s;
+    z-index: 200; max-width: 280px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    line-height: 1.5;
+  }
+  .tooltip.visible { opacity: 1; }
+
+  /* Pattern cards */
+  .pattern-card {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px; margin-bottom: 8px;
+  }
+  .pattern-card .pattern-name {
+    font-size: 12px; font-weight: 600; color: var(--both-color); margin-bottom: 4px;
+  }
+  .pattern-card .pattern-desc {
+    font-size: 11px; color: var(--text-muted); line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1 id="title">Investigation</h1>
+  <div class="header-controls">
+    <input type="text" class="search-input" id="searchInput" placeholder="Filter nodes...">
+    <label><input type="checkbox" id="toggleIcij" checked> ICIJ</label>
+    <label><input type="checkbox" id="toggleOs" checked> Sanctions</label>
+    <label><input type="checkbox" id="toggleAddresses"> Addresses</label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)">
+      Depth: <input type="range" id="hopSlider" min="0" max="3" value="3" style="width:80px;accent-color:var(--icij-color)">
+      <span id="hopLabel" style="min-width:20px">all</span>
+    </label>
+  </div>
+</div>
+
+<!-- Executive Summary -->
+<div class="exec-summary">
+  <div class="summary-grid" id="summaryGrid"></div>
+  <div class="findings-narrative" id="narrative"></div>
+</div>
+
+<!-- Tab navigation -->
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="network">Network Graph</button>
+  <button class="tab-btn" data-tab="ownership">Ownership Tree</button>
+  <button class="tab-btn" data-tab="coverage">Source Coverage</button>
+  <button class="tab-btn" data-tab="multi-timeline">Multi-Source Timeline</button>
+  <button class="tab-btn" data-tab="corporate">Corporate Structure</button>
+  <button class="tab-btn" data-tab="flow">Jurisdiction Flow</button>
+  <button class="tab-btn" data-tab="timeline">Timeline Analysis</button>
+  <button class="tab-btn" data-tab="matrix">Source Matrix</button>
+</div>
+
+<!-- Tab: Network -->
+<div class="tab-content active" id="tab-network">
+  <div class="graph-container">
+    <div class="graph-panel" id="graphPanel">
+      <svg id="graphSvg"></svg>
+      <div class="detail-panel" id="detailPanel">
+        <button class="close-btn" id="closeDetail">&times;</button>
+        <div id="detailContent"></div>
+      </div>
+    </div>
+    <div class="sidebar">
+      <h2>Jurisdictions</h2>
+      <div id="jurisdictionBars"></div>
+      <h3>Risk Indicators</h3>
+      <div id="riskIndicators"></div>
+      <h3>Detected Patterns</h3>
+      <div id="patternCards"></div>
+      <div class="legend">
+        <h3>Legend</h3>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--icij-color)"></div>ICIJ Offshore Leaks</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--os-color)"></div>OpenSanctions</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--gleif-color)"></div>GLEIF (Corporate Registry)</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--sec-color)"></div>SEC EDGAR</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--uk-color)"></div>UK Companies House</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--court-color)"></div>CourtListener</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--both-color)"></div>Multiple sources</div>
+        <div class="legend-item"><div class="legend-swatch" style="border:2px solid var(--sanction-color);background:transparent"></div>Sanctioned</div>
+        <div class="legend-item"><div class="legend-swatch" style="border:2px solid var(--pep-color);background:transparent"></div>Politically exposed</div>
+        <div class="legend-item"><div class="legend-swatch rect" style="background:var(--icij-color)"></div>Entity / Company</div>
+        <div class="legend-item"><div class="legend-swatch diamond" style="background:var(--icij-color)"></div>Intermediary</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab: Ownership Tree -->
+<div class="tab-content" id="tab-ownership">
+  <div class="flow-container">
+    <h3 style="margin-bottom:8px">Ownership Tree</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      Corporate ownership hierarchy from GLEIF LEI data. Shows parent-subsidiary relationships
+      as a tree. Nodes are colored by source — hover for details. Red borders indicate sanctions
+      exposure; yellow borders indicate PEP connections.
+    </p>
+    <div id="ownershipEmpty" style="display:none;color:var(--text-dim);font-size:13px;padding:40px;">No GLEIF ownership data available for this investigation. Use <code>ownership_trace</code> to generate corporate hierarchy data.</div>
+    <svg id="ownershipSvg"></svg>
+  </div>
+</div>
+
+<!-- Tab: Source Coverage Heatmap -->
+<div class="tab-content" id="tab-coverage">
+  <div class="matrix-container">
+    <h3 style="margin-bottom:8px">Source Coverage Heatmap</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      Each row is an entity, each column is a data source. Colored cells indicate the entity
+      was found in that source. Entities appearing in <strong style="color:var(--both-color)">3+ sources</strong>
+      are the highest-value findings — independent databases corroborate each other.
+    </p>
+    <div id="coverageContent"></div>
+  </div>
+</div>
+
+<!-- Tab: Multi-Source Timeline -->
+<div class="tab-content" id="tab-multi-timeline">
+  <div class="timeline-container">
+    <div class="timeline-section">
+      <h3>Multi-Source Event Timeline</h3>
+      <p class="explanation">
+        Plots events from all sources on a single timeline: ICIJ leak investigations,
+        SEC filing dates, court case filing dates, and sanctions listing dates.
+        Shows the narrative arc across independent data sources.
+      </p>
+      <svg id="multiTimelineSvg" height="400"></svg>
+    </div>
+  </div>
+</div>
+
+<!-- Tab: Corporate Structure -->
+<div class="tab-content" id="tab-corporate">
+  <div class="flow-container">
+    <h3 style="margin-bottom:8px">Corporate Structure</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      Vertical view of corporate relationships — ownership, directorship, and beneficial
+      control. PSC (Persons with Significant Control) ownership percentages shown where
+      available. Designed for <code>beneficial_owner</code> and <code>ownership_trace</code> results.
+    </p>
+    <div id="corporateEmpty" style="display:none;color:var(--text-dim);font-size:13px;padding:40px;">No corporate structure data available. Entities with parent/subsidiary or PSC relationships will appear here.</div>
+    <svg id="corporateSvg"></svg>
+  </div>
+</div>
+
+<!-- Tab: Jurisdiction Flow -->
+<div class="tab-content" id="tab-flow">
+  <div class="flow-container">
+    <h3 style="margin-bottom:8px">Jurisdiction Flow</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      Shows how entities flow between jurisdictions. Left column: person/officer country of origin.
+      Right column: entity/intermediary jurisdictions. Connections show which people are linked to
+      entities in which offshore jurisdictions. Wider bands = more connections.
+    </p>
+    <svg id="flowSvg"></svg>
+  </div>
+</div>
+
+<!-- Tab: Timeline -->
+<div class="tab-content" id="tab-timeline">
+  <div class="timeline-container">
+    <div class="timeline-section">
+      <h3>Investigation Sources Timeline</h3>
+      <p class="explanation">
+        Shows which leak investigations surfaced data about this subject.
+        Each investigation covers a different time period and set of offshore service providers.
+        Appearing across multiple leaks suggests a sustained offshore presence — the structures
+        weren't set up once and forgotten, but maintained across years and jurisdictions.
+      </p>
+      <svg id="investigationTimeline" height="180"></svg>
+    </div>
+    <div class="timeline-section">
+      <h3>Entity Incorporation Timeline</h3>
+      <p class="explanation">
+        Plots entity incorporation dates when available. Clusters of formations within a short
+        window may indicate <strong>temporal patterns</strong> — entities created in response to
+        external events such as sanctions announcements, elections, regulatory changes, or
+        personal events (divorce, litigation, political exposure).
+      </p>
+      <svg id="incorporationTimeline" height="200"></svg>
+    </div>
+    <div class="timeline-section" id="temporalAnalysis">
+      <h3>Temporal Pattern Analysis</h3>
+      <div id="temporalFindings" style="font-size:13px;color:var(--text-muted);line-height:1.7;max-width:700px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab: Source Matrix -->
+<div class="tab-content" id="tab-matrix">
+  <div class="matrix-container">
+    <h3 style="margin-bottom:8px">Cross-Reference Source Matrix</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      Every entity found in this investigation, showing which databases they appear in.
+      Entities appearing in <strong style="color:var(--both-color)">both ICIJ and OpenSanctions</strong>
+      are the highest-value findings — they connect documented offshore structures to
+      sanctions/PEP exposure.
+    </p>
+    <table class="matrix-table" id="matrixTable">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Sources</th>
+          <th>Countries</th>
+          <th>Risk Flags</th>
+          <th>Investigation</th>
+        </tr>
+      </thead>
+      <tbody id="matrixBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+const INVESTIGATION_DATA = __INVESTIGATION_DATA__;
+const data = INVESTIGATION_DATA;
+const nodes = data.nodes;
+const edges = data.edges;
+
+// Guard: if d3 didn't load, show an error message instead of a blank graph
+if (typeof d3 === 'undefined') {
+  document.getElementById('graphPanel').innerHTML =
+    '<p style="padding:40px;color:#f85149;font-size:14px">Failed to load D3.js from CDN. Check your network connection or ad blocker.</p>';
+}
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ============================================================
+// COMPUTED PROPERTIES
+// ============================================================
+const sanctionedCount = nodes.filter(n => n.sanctioned).length;
+const pepCount = nodes.filter(n => n.pep).length;
+const crossLinked = nodes.filter(n => n.source === 'both').length;
+const rcaCount = nodes.filter(n => (n.topics || []).includes('role.rca')).length;
+const icijCount = nodes.filter(n => n.source === 'icij' || n.source === 'both').length;
+const osCount = nodes.filter(n => n.source === 'opensanctions' || n.source === 'both').length;
+const gleifCount = nodes.filter(n => n.source === 'gleif').length;
+const secCount = nodes.filter(n => n.source === 'sec').length;
+const ukCount = nodes.filter(n => n.source === 'companies_house').length;
+const courtCount = nodes.filter(n => n.source === 'courtlistener').length;
+const allSources = [
+  icijCount && 'ICIJ', osCount && 'OpenSanctions', gleifCount && 'GLEIF',
+  secCount && 'SEC', ukCount && 'UK Co. House', courtCount && 'CourtListener'
+].filter(Boolean);
+
+const investigations = [...new Set(nodes.map(n => n.investigation).filter(Boolean))];
+const allCountries = {};
+nodes.forEach(n => {
+  (n.country_codes || []).forEach(c => { allCountries[c] = (allCountries[c] || 0) + 1; });
+  if (n.jurisdiction) allCountries[n.jurisdiction] = (allCountries[n.jurisdiction] || 0) + 1;
+});
+
+const degreeMap = {};
+edges.forEach(e => {
+  const s = e.source.id || e.source;
+  const t = e.target.id || e.target;
+  degreeMap[s] = (degreeMap[s] || 0) + 1;
+  degreeMap[t] = (degreeMap[t] || 0) + 1;
+});
+
+const maxHop = Math.max(...nodes.map(n => n.hop || 0), 0);
+
+// ============================================================
+// MULTI-SEED IDENTIFICATION
+// ============================================================
+const seedNames = data.metadata.query.split(',').map(s => s.trim().toLowerCase());
+const isMultiSeed = seedNames.length > 1;
+// Assign seed index to hop-0 nodes for color coding
+const seedColors = ['#58a6ff', '#f0883e', '#3fb950', '#f85149', '#bc8cff', '#d29922', '#db61a2'];
+if (isMultiSeed) {
+  nodes.forEach(n => {
+    if ((n.hop || 0) === 0) {
+      const idx = seedNames.findIndex(s => n.label.toLowerCase().includes(s) || s.includes(n.label.toLowerCase()));
+      n._seedIndex = idx >= 0 ? idx : 0;
+    }
+  });
+}
+
+// ============================================================
+// HEADER
+// ============================================================
+document.getElementById('title').innerHTML =
+  `${data.metadata.query} <span>— ${data.metadata.generated_at}</span>`;
+
+// ============================================================
+// EXECUTIVE SUMMARY
+// ============================================================
+const grid = document.getElementById('summaryGrid');
+
+function addCard(label, value, detail, cls = '') {
+  const card = document.createElement('div');
+  card.className = 'summary-card ' + cls;
+  card.innerHTML = `
+    <div class="card-label">${label}</div>
+    <div class="card-value" ${cls === 'critical' ? 'style="color:var(--sanction-color)"' : cls === 'warning' ? 'style="color:var(--pep-color)"' : ''}>${value}</div>
+    <div class="card-detail">${detail}</div>
+  `;
+  grid.appendChild(card);
+}
+
+if (isMultiSeed) {
+  addCard('Investigation Subjects', seedNames.length,
+    seedNames.map((s, i) => `<span style="color:${seedColors[i % seedColors.length]};font-weight:600">${s}</span>`).join(', '),
+    'info');
+  // Count shared connections
+  const hop0Ids = new Set(nodes.filter(n => (n.hop||0) === 0).map(n => n.id));
+  const sharedNodes = nodes.filter(n => {
+    if ((n.hop||0) === 0) return false;
+    const connectedSeeds = new Set();
+    edges.forEach(e => {
+      const sid = e.source.id||e.source, tid = e.target.id||e.target;
+      if (sid === n.id && hop0Ids.has(tid)) connectedSeeds.add(tid);
+      if (tid === n.id && hop0Ids.has(sid)) connectedSeeds.add(sid);
+    });
+    return connectedSeeds.size > 1;
+  });
+  if (sharedNodes.length > 0) {
+    addCard('Shared Connections', sharedNodes.length,
+      'Entities connected to multiple investigation subjects — these are the key intersection points.',
+      'critical');
+  }
+}
+
+addCard('Entities Found', nodes.length,
+  `Across ${allSources.length} sources: ${allSources.join(', ')}`,
+  'info');
+
+if (sanctionedCount > 0) {
+  addCard('Sanctioned', sanctionedCount,
+    'Active sanctions designations found — entities on international sanctions lists',
+    'critical');
+}
+
+if (crossLinked > 0) {
+  addCard('Cross-Referenced', crossLinked,
+    'Entities appearing in BOTH offshore leaks and sanctions/PEP databases — highest investigative value',
+    crossLinked > 0 ? 'warning' : 'info');
+}
+
+if (pepCount > 0) {
+  addCard('PEP Connections', pepCount,
+    'Links to politically exposed persons — triggers enhanced due diligence under AML frameworks',
+    'warning');
+}
+
+addCard('Jurisdictions', Object.keys(allCountries).length,
+  'Distinct countries/jurisdictions across all entities. More jurisdictions = more complex structure.');
+
+if (maxHop > 0) {
+  const hopBreakdown = [];
+  for (let h = 0; h <= maxHop; h++) {
+    const cnt = nodes.filter(n => (n.hop||0) === h).length;
+    hopBreakdown.push(`Hop ${h}: ${cnt}`);
+  }
+  addCard('Network Depth', maxHop + ' hops',
+    hopBreakdown.join(', ') + '. Deeper hops reveal indirect connections — shared officers, intermediaries, and second-degree sanctions exposure.',
+    'info');
+}
+
+addCard('Leak Investigations', investigations.length || 'N/A',
+  investigations.length
+    ? investigations.map(i => i.replace(/-/g, ' ')).join(', ')
+    : 'No investigation source data available');
+
+// Narrative
+const narrative = document.getElementById('narrative');
+let narText = `<strong>${data.metadata.query}</strong> was searched across ${allSources.length} data sources: ICIJ Offshore Leaks, OpenSanctions${gleifCount ? ', GLEIF corporate registry' : ''}${secCount ? ', SEC EDGAR filings' : ''}${ukCount ? ', UK Companies House' : ''}${courtCount ? ', US court records' : ''}. `;
+
+if (crossLinked > 0) {
+  narText += `<span class="flag-cross">${crossLinked} entit${crossLinked > 1 ? 'ies appear' : 'y appears'} in both databases</span> — this is a significant finding indicating documented offshore holdings connected to sanctions or PEP exposure. `;
+}
+if (sanctionedCount > 0) {
+  narText += `<span class="flag-sanction">${sanctionedCount} sanctioned entit${sanctionedCount > 1 ? 'ies were' : 'y was'} identified</span>, meaning active designations on international sanctions lists. `;
+}
+if (pepCount > 0) {
+  narText += `<span class="flag-pep">${pepCount} politically exposed person${pepCount > 1 ? 's' : ''}</span> ${pepCount > 1 ? 'are' : 'is'} connected to the investigation subject. Under most AML/KYC frameworks, PEP connections require enhanced due diligence. `;
+}
+if (rcaCount > 0) {
+  narText += `${rcaCount} close associate${rcaCount > 1 ? 's' : ''} of PEPs ${rcaCount > 1 ? 'were' : 'was'} identified — RCA status typically extends the same due diligence requirements as direct PEP status. `;
+}
+if (investigations.length > 1) {
+  narText += `The subject appears across <strong>${investigations.length} separate leak investigations</strong> (${investigations.map(i => i.replace(/-/g, ' ')).join(', ')}), indicating a sustained offshore presence maintained over multiple years. `;
+}
+
+const jKeys = Object.keys(allCountries);
+if (jKeys.length > 2) {
+  narText += `The ${jKeys.length}-jurisdiction footprint (${jKeys.slice(0, 5).join(', ')}${jKeys.length > 5 ? '...' : ''}) suggests a multi-jurisdictional structure that may be designed for regulatory arbitrage or opacity.`;
+}
+
+narrative.innerHTML = narText;
+
+// ============================================================
+// HELPERS
+// ============================================================
+function nodeColor(d) {
+  // In multi-seed mode, seed nodes get distinct colors
+  if (isMultiSeed && d._seedIndex != null) {
+    return seedColors[d._seedIndex % seedColors.length];
+  }
+  if (d.source === 'both') return 'var(--both-color)';
+  if (d.source === 'gleif') return 'var(--gleif-color)';
+  if (d.source === 'sec') return 'var(--sec-color)';
+  if (d.source === 'companies_house') return 'var(--uk-color)';
+  if (d.source === 'courtlistener') return 'var(--court-color)';
+  if (d.source === 'opensanctions') return 'var(--os-color)';
+  return 'var(--icij-color)';
+}
+function getRadius(d) {
+  const base = Math.max(6, Math.min(28, 6 + Math.sqrt(degreeMap[d.id] || 0) * 5));
+  // Reduce size for deeper hops
+  const hop = d.hop || 0;
+  const hopScale = hop === 0 ? 1 : hop === 1 ? 0.85 : 0.7;
+  return base * hopScale;
+}
+function hopOpacity(d) {
+  const hop = d.hop || 0;
+  return hop === 0 ? 1.0 : hop === 1 ? 0.85 : hop === 2 ? 0.65 : 0.5;
+}
+function isEntityType(d) {
+  const t = (d.type || '').toLowerCase();
+  return t === 'entity' || t === 'company' || t === 'organization' || t === 'case';
+}
+function isIntermediary(d) { return (d.type || '').toLowerCase() === 'intermediary'; }
+function isAddress(d) { return (d.type || '').toLowerCase() === 'address'; }
+function highlightBorder(d) {
+  if (d.sanctioned) return 'var(--sanction-color)';
+  if (d.pep) return 'var(--pep-color)';
+  if ((d.topics || []).includes('role.rca')) return 'var(--rca-color)';
+  return null;
+}
+
+function contextNote(d) {
+  const notes = [];
+  if (d.source === 'both') notes.push('This entity appears in multiple databases. Cross-references are high-value investigative findings — they connect data across independent sources.');
+  if (d.source === 'gleif') notes.push('Source: GLEIF LEI Registry — the global standard for legal entity identification. LEI records include corporate ownership chains (parent/subsidiary relationships).');
+  if (d.source === 'sec') notes.push('Source: SEC EDGAR — US Securities and Exchange Commission filings. This entity appears in public company disclosures.');
+  if (d.source === 'companies_house') notes.push('Source: UK Companies House — the official UK company registry. Includes Persons with Significant Control (PSC) beneficial ownership data.');
+  if (d.source === 'courtlistener') notes.push('Source: CourtListener — US federal court records (PACER/RECAP). This entity is involved in documented litigation.');
+  if (d.sanctioned) notes.push('This entity is on one or more active sanctions lists. Transactions involving sanctioned entities may be prohibited under applicable law.');
+  if (d.pep) notes.push('This person is classified as a Politically Exposed Person (PEP). Financial institutions are required to apply enhanced due diligence (EDD) to PEP-related transactions.');
+  if ((d.topics || []).includes('role.rca')) notes.push('Close associate (RCA) of a politically exposed person. Under FATF guidance, RCA status typically triggers the same enhanced due diligence requirements as direct PEP status.');
+  if (d.investigation) {
+    const invNames = { 'panama-papers': 'Panama Papers (2016, Mossack Fonseca)', 'pandora-papers': 'Pandora Papers (2021, 14 offshore providers)', 'paradise-papers': 'Paradise Papers (2017, Appleby)', 'bahamas-leaks': 'Bahamas Leaks (2016)', 'offshore-leaks': 'Offshore Leaks (2013)' };
+    notes.push(`Source: ${invNames[d.investigation] || d.investigation}. This entity was identified in leaked documents from this investigation.`);
+  }
+  return notes;
+}
+
+// ============================================================
+// NETWORK GRAPH
+// ============================================================
+const graphPanel = document.getElementById('graphPanel');
+const svg = d3.select('#graphSvg');
+// clientWidth can be 0 if CSS grid hasn't computed yet; use robust fallback
+let width = graphPanel.clientWidth || graphPanel.getBoundingClientRect().width || 800;
+if (width < 100) width = 800;  // guard against tiny/zero layout
+const height = 650;
+
+svg.attr('width', width).attr('height', height);
+
+svg.append('defs').append('marker')
+  .attr('id', 'arrowhead').attr('viewBox', '0 -5 10 10')
+  .attr('refX', 20).attr('refY', 0)
+  .attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto')
+  .append('path').attr('d', 'M0,-4L10,0L0,4').attr('fill', 'var(--edge-color)');
+
+const g = svg.append('g');
+svg.call(d3.zoom().scaleExtent([0.1, 8]).on('zoom', e => g.attr('transform', e.transform)));
+
+const simulation = d3.forceSimulation(nodes)
+  .force('link', d3.forceLink(edges).id(d => d.id).distance(80))
+  .force('charge', d3.forceManyBody().strength(-200))
+  .force('center', d3.forceCenter(width / 2, height / 2))
+  .force('collide', d3.forceCollide().radius(d => getRadius(d) + 4));
+
+// Re-center simulation once the CSS grid layout computes the panel's actual width.
+// At script time, clientWidth may be 0 if the grid hasn't resolved yet.
+new ResizeObserver((entries, obs) => {
+  const w = entries[0].contentRect.width;
+  if (w > 100 && Math.abs(w - width) > 50) {
+    svg.attr('width', w);
+    simulation.force('center', d3.forceCenter(w / 2, height / 2));
+    simulation.alpha(1).restart();
+    obs.disconnect();
+  }
+}).observe(graphPanel);
+
+const link = g.append('g').selectAll('line').data(edges).join('line')
+  .attr('stroke', 'var(--edge-color)').attr('stroke-width', 1.5)
+  .attr('stroke-opacity', 0.5).attr('marker-end', 'url(#arrowhead)');
+
+// Edge labels
+const edgeLabel = g.append('g').selectAll('text').data(edges).join('text')
+  .text(d => d.relationship && d.relationship !== 'linked' && d.relationship !== 'same_name' ? d.relationship.replace(/_/g, ' ') : '')
+  .attr('font-size', '9px').attr('fill', 'var(--text-dim)')
+  .attr('text-anchor', 'middle').attr('pointer-events', 'none');
+
+const node = g.append('g').selectAll('g').data(nodes).join('g')
+  .attr('class', 'node-group')
+  .call(d3.drag().on('start', ds).on('drag', dr).on('end', de));
+
+node.each(function(d) {
+  const el = d3.select(this);
+  const r = getRadius(d);
+  const border = highlightBorder(d);
+  if (isIntermediary(d)) {
+    const s = r * 0.9;
+    el.append('rect').attr('width', s*1.4).attr('height', s*1.4).attr('x', -s*0.7).attr('y', -s*0.7)
+      .attr('rx', 2).attr('transform', 'rotate(45)')
+      .attr('fill', nodeColor(d)).attr('fill-opacity', hopOpacity(d))
+      .attr('stroke', border || 'none').attr('stroke-width', border ? 2.5 : 0)
+      .attr('stroke-dasharray', d.sanctioned ? '4,2' : 'none');
+  } else if (isEntityType(d)) {
+    const w = r*2, h = r*1.4;
+    el.append('rect').attr('width', w).attr('height', h).attr('x', -w/2).attr('y', -h/2).attr('rx', 4)
+      .attr('fill', nodeColor(d)).attr('fill-opacity', hopOpacity(d))
+      .attr('stroke', border || 'none').attr('stroke-width', border ? 2.5 : 0)
+      .attr('stroke-dasharray', d.sanctioned ? '4,2' : 'none');
+  } else if (isAddress(d)) {
+    const s = Math.max(4, r*0.6);
+    el.append('rect').attr('width', s).attr('height', s).attr('x', -s/2).attr('y', -s/2)
+      .attr('fill', nodeColor(d)).attr('fill-opacity', 0.3 * hopOpacity(d));
+  } else {
+    el.append('circle').attr('r', r)
+      .attr('fill', nodeColor(d)).attr('fill-opacity', hopOpacity(d))
+      .attr('stroke', border || 'none').attr('stroke-width', border ? 2.5 : 0)
+      .attr('stroke-dasharray', d.sanctioned ? '4,2' : 'none');
+  }
+});
+
+node.filter(d => (degreeMap[d.id] || 0) >= 1 || d.sanctioned || d.pep || d.source === 'both')
+  .append('text')
+  .text(d => d.label.length > 24 ? d.label.slice(0, 22) + '...' : d.label)
+  .attr('dy', d => getRadius(d) + 14).attr('text-anchor', 'middle')
+  .attr('fill', 'var(--text-muted)').attr('font-size', '10px').attr('pointer-events', 'none');
+
+const tooltip = document.getElementById('tooltip');
+node.on('mouseover', (event, d) => {
+    let html = `<strong>${d.label}</strong>`;
+    if (d.type) html += ` <span style="color:var(--text-dim)">(${d.type})</span>`;
+    if (d.country_codes && d.country_codes.length) html += `<br>Countries: ${d.country_codes.join(', ')}`;
+    if (d.investigation) html += `<br>Source: ${d.investigation.replace(/-/g,' ')}`;
+    if (d.sanctioned) html += `<br><span style="color:var(--sanction-color);font-weight:600">Sanctioned</span>`;
+    if (d.pep) html += `<br><span style="color:var(--pep-color);font-weight:600">Politically Exposed Person</span>`;
+    if ((d.topics||[]).includes('role.rca')) html += `<br><span style="color:var(--rca-color)">Close associate of PEP</span>`;
+    tooltip.innerHTML = html;
+    tooltip.classList.add('visible');
+  })
+  .on('mousemove', e => { tooltip.style.left=(e.clientX+14)+'px'; tooltip.style.top=(e.clientY-14)+'px'; })
+  .on('mouseout', () => tooltip.classList.remove('visible'));
+
+node.on('click', (event, d) => { event.stopPropagation(); showDetail(d); });
+svg.on('click', () => document.getElementById('detailPanel').classList.remove('visible'));
+document.getElementById('closeDetail').addEventListener('click', () =>
+  document.getElementById('detailPanel').classList.remove('visible'));
+
+function showDetail(d) {
+  const panel = document.getElementById('detailPanel');
+  const content = document.getElementById('detailContent');
+  let tags = '';
+  const sourceLabels = {
+    'both': 'Multiple Sources', 'icij': 'ICIJ', 'opensanctions': 'OpenSanctions',
+    'gleif': 'GLEIF', 'sec': 'SEC EDGAR', 'companies_house': 'UK Companies House',
+    'courtlistener': 'CourtListener',
+  };
+  const srcLabel = sourceLabels[d.source] || d.source;
+  const srcClass = d.source === 'both' ? 'both-tag' : d.source === 'icij' ? 'icij' : 'os';
+  tags += `<span class="tag ${srcClass}" style="color:${nodeColor(d)}">${srcLabel}</span> `;
+  if (d.sanctioned) tags += '<span class="tag sanction">Sanctioned</span> ';
+  if (d.pep) tags += '<span class="tag pep">PEP</span> ';
+  if ((d.topics||[]).includes('role.rca')) tags += '<span class="tag rca">Close Associate</span> ';
+
+  let rows = '';
+  if (d.type) rows += `<div class="detail-row"><span class="label">Type</span><span>${d.type}</span></div>`;
+  if (d.hop != null && d.hop > 0) rows += `<div class="detail-row"><span class="label">Network distance</span><span>Hop ${d.hop} (${d.hop === 1 ? 'direct connection' : d.hop === 2 ? 'second-degree' : 'third-degree'})</span></div>`;
+  if (d.jurisdiction) rows += `<div class="detail-row"><span class="label">Jurisdiction</span><span>${d.jurisdiction}</span></div>`;
+  if (d.country_codes&&d.country_codes.length) rows += `<div class="detail-row"><span class="label">Countries</span><span>${d.country_codes.join(', ')}</span></div>`;
+  if (d.investigation) rows += `<div class="detail-row"><span class="label">Investigation</span><span>${d.investigation.replace(/-/g,' ')}</span></div>`;
+  if (d.datasets&&d.datasets.length) rows += `<div class="detail-row"><span class="label">Datasets</span><span>${d.datasets.join(', ')}</span></div>`;
+  if (d.score) rows += `<div class="detail-row"><span class="label">Match Score</span><span>${typeof d.score === 'number' ? d.score.toFixed(2) : d.score}</span></div>`;
+  if (d.incorporation_date) rows += `<div class="detail-row"><span class="label">Incorporated</span><span>${d.incorporation_date}</span></div>`;
+  if (d.topics&&d.topics.length) rows += `<div class="detail-row"><span class="label">Topics</span><span>${d.topics.join(', ')}</span></div>`;
+
+  const notes = contextNote(d);
+  const notesHtml = notes.map(n =>
+    `<div class="context-note${d.sanctioned ? ' warning' : ''}">${n}</div>`
+  ).join('');
+
+  const connected = edges
+    .filter(e => (e.source.id||e.source)===d.id||(e.target.id||e.target)===d.id)
+    .map(e => {
+      const oid = (e.source.id||e.source)===d.id ? (e.target.id||e.target) : (e.source.id||e.source);
+      const o = nodes.find(n => n.id===oid);
+      return o ? `<div class="conn-item" data-id="${o.id}">${o.label} <span style="color:var(--text-dim)">(${e.relationship||'linked'})</span></div>` : '';
+    }).join('');
+
+  content.innerHTML = `
+    <h3>${d.label}</h3>
+    <div class="meta">${d.id}</div>
+    <div class="tags">${tags}</div>
+    ${rows}
+    ${notesHtml}
+    ${connected ? `<h3 style="font-size:12px;margin:14px 0 6px;color:var(--text-muted)">CONNECTIONS</h3>${connected}` : ''}
+  `;
+  content.querySelectorAll('.conn-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const t = nodes.find(n => n.id===el.dataset.id);
+      if (t) showDetail(t);
+    });
+  });
+  panel.classList.add('visible');
+}
+
+simulation.on('tick', () => {
+  link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+  edgeLabel.attr('x',d=>(d.source.x+d.target.x)/2).attr('y',d=>(d.source.y+d.target.y)/2-4);
+  node.attr('transform',d=>`translate(${d.x},${d.y})`);
+});
+function ds(e){if(!e.active)simulation.alphaTarget(0.3).restart();e.subject.fx=e.subject.x;e.subject.fy=e.subject.y;}
+function dr(e){e.subject.fx=e.x;e.subject.fy=e.y;}
+function de(e){if(!e.active)simulation.alphaTarget(0);e.subject.fx=null;e.subject.fy=null;}
+
+// ============================================================
+// SIDEBAR: JURISDICTIONS
+// ============================================================
+const jurisdictionCounts = {};
+nodes.forEach(n => {
+  const codes = [...(n.country_codes||[])];
+  if (n.jurisdiction) codes.push(n.jurisdiction);
+  [...new Set(codes)].forEach(c => { if(c) jurisdictionCounts[c]=(jurisdictionCounts[c]||0)+1; });
+});
+const jSorted = Object.entries(jurisdictionCounts).sort((a,b)=>b[1]-a[1]);
+const maxJC = jSorted.length ? jSorted[0][1] : 1;
+const barsC = document.getElementById('jurisdictionBars');
+jSorted.forEach(([code,count]) => {
+  const bw = Math.max(4,(count/maxJC)*140);
+  const div = document.createElement('div');
+  div.className = 'jurisdiction-bar';
+  div.innerHTML = `<span class="code">${code}</span><div class="bar" style="width:${bw}px;background:var(--icij-color)"></div><span class="count">${count}</span>`;
+  div.addEventListener('click', () => {
+    node.select('circle,rect').attr('opacity', d => {
+      const c=[...(d.country_codes||[])]; if(d.jurisdiction) c.push(d.jurisdiction);
+      return c.includes(code)?1:0.1;
+    });
+    link.attr('stroke-opacity',0.1);
+    setTimeout(()=>{node.select('circle,rect').attr('opacity',1);link.attr('stroke-opacity',0.5);},3000);
+  });
+  barsC.appendChild(div);
+});
+
+// Risk indicators
+const riskDiv = document.getElementById('riskIndicators');
+const risks = [];
+if (sanctionedCount) risks.push({label:'Sanctioned entities',count:sanctionedCount,color:'var(--sanction-color)'});
+if (pepCount) risks.push({label:'PEP connections',count:pepCount,color:'var(--pep-color)'});
+if (crossLinked) risks.push({label:'Cross-linked (both DBs)',count:crossLinked,color:'var(--both-color)'});
+if (rcaCount) risks.push({label:'Close associates (RCA)',count:rcaCount,color:'var(--rca-color)'});
+risks.forEach(r => {
+  const div=document.createElement('div'); div.className='detail-row';
+  div.innerHTML=`<span class="label">${r.label}</span><span style="color:${r.color};font-weight:600">${r.count}</span>`;
+  riskDiv.appendChild(div);
+});
+if (!risks.length) riskDiv.innerHTML='<div style="font-size:12px;color:var(--text-muted)">No risk indicators detected</div>';
+
+// Pattern detection
+const patternDiv = document.getElementById('patternCards');
+const patterns = [];
+
+// Starburst: single name connected to many entities
+const nameGroups = {};
+nodes.forEach(n => { if(n.source!=='opensanctions'){const k=n.label.toLowerCase();nameGroups[k]=(nameGroups[k]||0)+1;}});
+Object.entries(nameGroups).forEach(([name,count]) => {
+  if (count >= 3) patterns.push({name:'Starburst',desc:`"${name}" appears as officer across ${count} entities — hub-and-spoke topology suggesting single beneficial owner with multiple offshore vehicles.`});
+});
+
+// Multi-investigation
+if (investigations.length >= 2) patterns.push({name:'Sustained Presence',desc:`Entities found across ${investigations.length} separate leak investigations (${investigations.map(i=>i.replace(/-/g,' ')).join(', ')}). This is not a one-time offshore arrangement — it was maintained across years and providers.`});
+
+// Multi-jurisdiction
+if (Object.keys(allCountries).length >= 3) patterns.push({name:'Multi-Jurisdictional',desc:`${Object.keys(allCountries).length} jurisdictions involved (${Object.keys(allCountries).slice(0,5).join(', ')}). Multi-jurisdiction structures create regulatory arbitrage opportunities and complicate enforcement.`});
+
+// PEP Opacity Layer
+if (pepCount > 0 && icijCount > 0) patterns.push({name:'PEP Opacity Layer',desc:'Offshore entities linked to politically exposed persons. PEPs using offshore structures may be shielding assets from public disclosure requirements in their home jurisdiction.'});
+
+// Cross-reference
+if (crossLinked > 0) patterns.push({name:'Cross-Source Confirmation',desc:'Same entity confirmed across independent databases (ICIJ leaks + OpenSanctions). Cross-source confirmation significantly increases confidence in the finding.'});
+
+if (patterns.length) {
+  patterns.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'pattern-card';
+    card.innerHTML = `<div class="pattern-name">${p.name}</div><div class="pattern-desc">${p.desc}</div>`;
+    patternDiv.appendChild(card);
+  });
+} else {
+  patternDiv.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">No structural patterns detected</div>';
+}
+
+// ============================================================
+// JURISDICTION FLOW (Bipartite: Persons -> Jurisdictions)
+// ============================================================
+(function buildFlow() {
+  const flowSvg = d3.select('#flowSvg');
+  const fW = Math.max(document.querySelector('.flow-container').clientWidth, document.body.clientWidth - 48, 700) - 48;
+
+  // Build bipartite: person nodes (left) -> jurisdictions they're linked to (right)
+  // We look at each node's country_codes AND the country_codes of nodes they connect to
+  const personNodes = nodes.filter(n => {
+    const t = (n.type||'').toLowerCase();
+    return t === 'officer' || t === 'person';
+  });
+
+  // Collect all jurisdiction codes each person is associated with
+  // (their own + connected nodes')
+  const personToJurisdictions = {};
+  personNodes.forEach(n => {
+    const jurisdictions = new Set(n.country_codes || []);
+    // Add jurisdictions from connected nodes
+    edges.forEach(e => {
+      const sid = e.source.id||e.source;
+      const tid = e.target.id||e.target;
+      let other = null;
+      if (sid === n.id) other = nodes.find(x => x.id === tid);
+      if (tid === n.id) other = nodes.find(x => x.id === sid);
+      if (other) (other.country_codes||[]).forEach(c => jurisdictions.add(c));
+    });
+    if (jurisdictions.size > 0) {
+      personToJurisdictions[n.label.split('  (')[0]] = {
+        node: n,
+        jurisdictions: [...jurisdictions]
+      };
+    }
+  });
+
+  const leftNames = Object.keys(personToJurisdictions).sort();
+  const allJur = [...new Set(leftNames.flatMap(k => personToJurisdictions[k].jurisdictions))].sort();
+  const fH = Math.max(300, Math.max(leftNames.length, allJur.length) * 50 + 80);
+  flowSvg.attr('height', fH);
+
+  if (leftNames.length === 0 || allJur.length === 0) {
+    // Pure fallback: horizontal bar chart of jurisdictions
+    const margin = {top:20,right:100,bottom:20,left:60};
+    const sorted = Object.entries(allCountries).sort((a,b)=>b[1]-a[1]);
+    const chartH = Math.max(200, sorted.length * 36);
+    flowSvg.attr('height', chartH + margin.top + margin.bottom);
+    const g = flowSvg.append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+    const y = d3.scaleBand().domain(sorted.map(d=>d[0])).range([0,chartH]).padding(0.3);
+    const x = d3.scaleLinear().domain([0,d3.max(sorted,d=>d[1])||1]).range([0,fW-margin.left-margin.right]);
+    g.selectAll('.bar').data(sorted).join('rect')
+      .attr('y',d=>y(d[0])).attr('height',y.bandwidth())
+      .attr('width',d=>Math.max(4,x(d[1]))).attr('fill','var(--icij-color)').attr('fill-opacity',0.7).attr('rx',3);
+    g.selectAll('.code').data(sorted).join('text')
+      .attr('x',-8).attr('y',d=>y(d[0])+y.bandwidth()/2).attr('dy','0.35em')
+      .attr('text-anchor','end').attr('fill','var(--text)').attr('font-size','13px')
+      .attr('font-weight','600').text(d=>d[0]);
+    g.selectAll('.cnt').data(sorted).join('text')
+      .attr('x',d=>Math.max(4,x(d[1]))+8).attr('y',d=>y(d[0])+y.bandwidth()/2).attr('dy','0.35em')
+      .attr('fill','var(--text-muted)').attr('font-size','12px').text(d=>d[1]+' entities');
+    return;
+  }
+
+  // Bipartite layout
+  const margin = {top:30,right:60,bottom:30,left:200};
+  const innerW = fW - margin.left - margin.right;
+  const innerH = fH - margin.top - margin.bottom;
+  const gf = flowSvg.append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+
+  const yL = d3.scaleBand().domain(leftNames).range([0,innerH]).padding(0.25);
+  const yR = d3.scaleBand().domain(allJur).range([0,innerH]).padding(0.25);
+
+  // Column headers
+  gf.append('text').attr('x',0).attr('y',-14)
+    .attr('fill','var(--text-dim)').attr('font-size','10px').attr('font-weight','600')
+    .attr('text-anchor','middle').text('PERSONS / OFFICERS');
+  gf.append('text').attr('x',innerW).attr('y',-14)
+    .attr('fill','var(--text-dim)').attr('font-size','10px').attr('font-weight','600')
+    .attr('text-anchor','middle').text('JURISDICTIONS');
+
+  // Flow bands
+  leftNames.forEach(name => {
+    const info = personToJurisdictions[name];
+    const nodeCol = info.node.source === 'both' ? 'var(--both-color)' :
+                    info.node.source === 'opensanctions' ? 'var(--os-color)' : 'var(--icij-color)';
+    info.jurisdictions.forEach(jur => {
+      const y1 = yL(name) + yL.bandwidth()/2;
+      const y2 = yR(jur) + yR.bandwidth()/2;
+      const path = `M0,${y1} C${innerW*0.35},${y1} ${innerW*0.65},${y2} ${innerW},${y2}`;
+      gf.append('path').attr('d', path)
+        .attr('fill','none').attr('stroke',nodeCol)
+        .attr('stroke-width', 3).attr('stroke-opacity',0.25);
+    });
+  });
+
+  // Left nodes + labels (persons)
+  leftNames.forEach(name => {
+    const info = personToJurisdictions[name];
+    const yPos = yL(name) + yL.bandwidth()/2;
+    const col = info.node.source === 'both' ? 'var(--both-color)' :
+                info.node.source === 'opensanctions' ? 'var(--os-color)' : 'var(--icij-color)';
+    const border = highlightBorder(info.node);
+    gf.append('circle').attr('cx',0).attr('cy',yPos).attr('r',7)
+      .attr('fill',col).attr('stroke',border||'none').attr('stroke-width',border?2:0);
+    gf.append('text').attr('x',-14).attr('y',yPos).attr('dy','0.35em')
+      .attr('text-anchor','end').attr('fill',col).attr('font-size','12px')
+      .attr('font-weight','600').text(name.length > 24 ? name.slice(0,22)+'...' : name);
+  });
+
+  // Right nodes + labels (jurisdictions)
+  allJur.forEach(jur => {
+    const yPos = yR(jur) + yR.bandwidth()/2;
+    gf.append('circle').attr('cx',innerW).attr('cy',yPos).attr('r',7)
+      .attr('fill','var(--icij-color)');
+    gf.append('text').attr('x',innerW+14).attr('y',yPos).attr('dy','0.35em')
+      .attr('text-anchor','start').attr('fill','var(--text)').attr('font-size','13px')
+      .attr('font-weight','600').text(jur);
+    // Count
+    const cnt = Object.values(personToJurisdictions).filter(p => p.jurisdictions.includes(jur)).length;
+    gf.append('text').attr('x',innerW+14).attr('y',yPos+14)
+      .attr('text-anchor','start').attr('fill','var(--text-dim)').attr('font-size','10px')
+      .text(`${cnt} person${cnt>1?'s':''}`);
+  });
+})();
+
+// ============================================================
+// TIMELINE: INVESTIGATIONS
+// ============================================================
+(function buildInvestigationTimeline() {
+  const svgEl = d3.select('#investigationTimeline');
+  const tW = Math.max(document.querySelector('.timeline-container').clientWidth, document.body.clientWidth - 48, 700) - 48;
+  svgEl.attr('width', tW);
+
+  // Each investigation: id, label, year of leak publication, end of data coverage
+  const invData = [
+    {id:'offshore-leaks', label:'Offshore Leaks', year:2013, endYear:2013, color:'#3fb950'},
+    {id:'bahamas-leaks', label:'Bahamas Leaks', year:2016, endYear:2016, color:'#58a6ff'},
+    {id:'panama-papers', label:'Panama Papers', year:2016, endYear:2016, color:'#f0883e'},
+    {id:'paradise-papers', label:'Paradise Papers', year:2017, endYear:2017, color:'#bc8cff'},
+    {id:'pandora-papers', label:'Pandora Papers', year:2021, endYear:2021, color:'#f85149'},
+  ];
+
+  // Check which investigations contain data about our subject
+  // Handle comma-separated investigations from merged nodes
+  const foundSet = new Set();
+  investigations.forEach(inv => {
+    inv.split(', ').forEach(i => foundSet.add(i.trim()));
+  });
+
+  const margin = {top:30,right:40,bottom:30,left:160};
+  const innerW = tW - margin.left - margin.right;
+  const innerH = 130;
+  const g = svgEl.append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear().domain([2012, 2023]).range([0, innerW]);
+  const y = d3.scaleBand().domain(invData.map(d=>d.id)).range([0,innerH]).padding(0.3);
+
+  // X axis
+  g.append('g').attr('transform',`translate(0,${innerH})`)
+    .call(d3.axisBottom(x).ticks(6).tickFormat(d3.format('d')))
+    .selectAll('text').attr('fill','var(--text-muted)').attr('font-size','10px');
+  g.selectAll('.domain,.tick line').attr('stroke','var(--border)');
+
+  // Rows for each investigation
+  invData.forEach(inv => {
+    const active = foundSet.has(inv.id);
+    const barX = x(inv.year);
+    const barW = Math.max(12, 20); // fixed-width marker at the year
+
+    // Background row highlight for active
+    if (active) {
+      g.append('rect')
+        .attr('x', 0).attr('y', y(inv.id) - 2)
+        .attr('width', innerW).attr('height', y.bandwidth() + 4)
+        .attr('fill', inv.color).attr('fill-opacity', 0.04).attr('rx', 3);
+    }
+
+    // Year marker dot
+    g.append('circle')
+      .attr('cx', barX).attr('cy', y(inv.id) + y.bandwidth()/2)
+      .attr('r', active ? 8 : 4)
+      .attr('fill', inv.color).attr('fill-opacity', active ? 0.8 : 0.15);
+
+    // Investigation label (left)
+    g.append('text')
+      .attr('x', -12).attr('y', y(inv.id) + y.bandwidth()/2).attr('dy', '0.35em')
+      .attr('text-anchor', 'end').attr('font-size', '12px')
+      .attr('font-weight', active ? '600' : '400')
+      .attr('fill', active ? inv.color : 'var(--text-dim)')
+      .text(inv.label);
+
+    // Entity count (right of dot) for active investigations
+    if (active) {
+      // Count entities: check both exact match and comma-separated
+      const count = nodes.filter(n => {
+        if (!n.investigation) return false;
+        return n.investigation === inv.id || n.investigation.includes(inv.id);
+      }).length;
+      g.append('text')
+        .attr('x', barX + 16).attr('y', y(inv.id) + y.bandwidth()/2).attr('dy', '0.35em')
+        .attr('font-size', '11px').attr('fill', 'var(--text)')
+        .text(`${count} entit${count === 1 ? 'y' : 'ies'} found`);
+    }
+  });
+})();
+
+// ============================================================
+// TIMELINE: INCORPORATION DATES
+// ============================================================
+(function buildIncorporationTimeline() {
+  const svgEl = d3.select('#incorporationTimeline');
+  const tW = Math.max(document.querySelector('.timeline-container').clientWidth, document.body.clientWidth - 48, 700) - 48;
+  svgEl.attr('width', tW);
+
+  const timelineNodes = nodes.filter(n => n.incorporation_date);
+  const parseDate = d3.timeParse('%Y-%m-%d');
+  timelineNodes.forEach(n => n._date = parseDate(n.incorporation_date));
+  const validDates = timelineNodes.filter(n => n._date);
+
+  const margin = {top:20,right:40,bottom:40,left:60};
+  const innerW = tW - margin.left - margin.right;
+  const innerH = 140;
+  const g = svgEl.append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+
+  if (validDates.length > 0) {
+    const x = d3.scaleTime().domain(d3.extent(validDates,d=>d._date)).range([0,innerW]).nice();
+    g.append('g').attr('transform',`translate(0,${innerH})`)
+      .call(d3.axisBottom(x).ticks(8).tickFormat(d3.timeFormat('%Y')))
+      .selectAll('text').attr('fill','var(--text-muted)').attr('font-size','10px');
+    g.selectAll('.domain,.tick line').attr('stroke','var(--border)');
+
+    // Y jitter for overlap
+    validDates.forEach((n,i) => { n._jy = innerH/2 + (Math.random()-0.5)*innerH*0.6; });
+
+    g.selectAll('circle').data(validDates).join('circle')
+      .attr('cx',d=>x(d._date)).attr('cy',d=>d._jy)
+      .attr('r',d=>Math.max(5,Math.min(12,5+Math.sqrt(degreeMap[d.id]||0)*3)))
+      .attr('fill',d=>nodeColor(d)).attr('fill-opacity',0.7)
+      .attr('stroke',d=>highlightBorder(d)||'none').attr('stroke-width',2)
+      .style('cursor','pointer')
+      .on('click',(_,d)=>showDetail(d))
+      .on('mouseover',(event,d)=>{
+        tooltip.innerHTML=`<strong>${d.label}</strong><br>Incorporated: ${d.incorporation_date}`;
+        tooltip.classList.add('visible');
+      })
+      .on('mousemove',e=>{tooltip.style.left=(e.clientX+14)+'px';tooltip.style.top=(e.clientY-14)+'px';})
+      .on('mouseout',()=>tooltip.classList.remove('visible'));
+
+    g.selectAll('.date-label').data(validDates.filter(d=>(degreeMap[d.id]||0)>=2))
+      .join('text').attr('x',d=>x(d._date)).attr('y',d=>d._jy-14)
+      .attr('text-anchor','middle').attr('font-size','9px').attr('fill','var(--text-dim)')
+      .text(d=>d.label.length>18?d.label.slice(0,16)+'...':d.label);
+
+    // Temporal cluster detection
+    if (validDates.length >= 3) {
+      const sorted = [...validDates].sort((a,b)=>a._date-b._date);
+      const clusters = [];
+      let cluster = [sorted[0]];
+      for (let i=1;i<sorted.length;i++) {
+        const diff = (sorted[i]._date - sorted[i-1]._date) / (1000*60*60*24);
+        if (diff <= 90) { cluster.push(sorted[i]); }
+        else { if(cluster.length>=2) clusters.push([...cluster]); cluster=[sorted[i]]; }
+      }
+      if (cluster.length>=2) clusters.push(cluster);
+
+      clusters.forEach(cl => {
+        const x1 = x(cl[0]._date);
+        const x2 = x(cl[cl.length-1]._date);
+        g.append('rect').attr('x',x1-4).attr('y',0).attr('width',Math.max(8,x2-x1+8)).attr('height',innerH)
+          .attr('fill','var(--pep-color)').attr('fill-opacity',0.08).attr('rx',4);
+        g.append('text').attr('x',(x1+x2)/2).attr('y',innerH+28).attr('text-anchor','middle')
+          .attr('font-size','9px').attr('fill','var(--pep-color)')
+          .text(`Cluster: ${cl.length} entities in ${Math.round((cl[cl.length-1]._date-cl[0]._date)/(1000*60*60*24))} days`);
+      });
+
+      // Temporal analysis text
+      const findings = document.getElementById('temporalFindings');
+      if (clusters.length > 0) {
+        findings.innerHTML = clusters.map(cl => {
+          const days = Math.round((cl[cl.length-1]._date-cl[0]._date)/(1000*60*60*24));
+          return `<strong>Temporal cluster detected:</strong> ${cl.length} entities incorporated within ${days} days (${cl[0].incorporation_date} to ${cl[cl.length-1].incorporation_date}). Rapid bursts of entity formation may correlate with external events — sanctions announcements, elections, regulatory changes, or personal events. Cross-reference these dates against known events for the investigation subject.`;
+        }).join('<br><br>');
+      } else {
+        findings.innerHTML = 'No temporal clustering detected. Entity formations appear to be distributed over time rather than concentrated in bursts.';
+      }
+    }
+  } else {
+    g.append('text').attr('x',innerW/2).attr('y',innerH/2)
+      .attr('text-anchor','middle').attr('fill','var(--text-muted)').attr('font-size','13px')
+      .text('No incorporation dates available in the current dataset');
+    g.append('text').attr('x',innerW/2).attr('y',innerH/2+20)
+      .attr('text-anchor','middle').attr('fill','var(--text-dim)').attr('font-size','11px')
+      .text('ICIJ entity data does not always include formation dates. Use icij_extend to request them.');
+    document.getElementById('temporalFindings').innerHTML = 'Temporal analysis requires incorporation dates. Use <code>icij_extend</code> with the <code>incorporation_date</code> property to retrieve dates for specific entities.';
+  }
+})();
+
+// ============================================================
+// SOURCE MATRIX
+// ============================================================
+(function buildMatrix() {
+  const tbody = document.getElementById('matrixBody');
+  const sorted = [...nodes].sort((a,b) => {
+    if (a.source==='both' && b.source!=='both') return -1;
+    if (b.source==='both' && a.source!=='both') return 1;
+    if (a.sanctioned && !b.sanctioned) return -1;
+    if (b.sanctioned && !a.sanctioned) return 1;
+    if (a.pep && !b.pep) return -1;
+    if (b.pep && !a.pep) return 1;
+    return (degreeMap[b.id]||0)-(degreeMap[a.id]||0);
+  });
+
+  sorted.forEach(n => {
+    const tr = document.createElement('tr');
+    if (n.source==='both') tr.style.background='rgba(188,140,255,0.05)';
+    if (n.sanctioned) tr.style.background='rgba(248,81,73,0.05)';
+
+    let sources = '';
+    if (n.source==='icij'||n.source==='both') sources+='<span class="source-badge icij">ICIJ</span>';
+    if (n.source==='opensanctions'||n.source==='both') sources+='<span class="source-badge os">Sanctions</span>';
+
+    let flags = '';
+    if (n.sanctioned) flags+='<span class="tag sanction">Sanctioned</span> ';
+    if (n.pep) flags+='<span class="tag pep">PEP</span> ';
+    if ((n.topics||[]).includes('role.rca')) flags+='<span class="tag rca">RCA</span> ';
+    if (!flags) flags='<span style="color:var(--text-dim)">-</span>';
+
+    tr.innerHTML = `
+      <td class="name-cell">${n.label}</td>
+      <td style="color:var(--text-muted)">${n.type||'-'}</td>
+      <td>${sources}</td>
+      <td style="color:var(--text-muted)">${(n.country_codes||[]).join(', ')||'-'}</td>
+      <td>${flags}</td>
+      <td style="color:var(--text-muted);font-size:12px">${n.investigation?n.investigation.replace(/-/g,' '):'-'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+})();
+
+// ============================================================
+// OWNERSHIP TREE (Tab: ownership)
+// ============================================================
+(function buildOwnershipTree() {
+  const svgEl = d3.select('#ownershipSvg');
+  const w = Math.max(document.body.clientWidth - 48, 700);
+
+  // Find nodes with parent_of or subsidiary edges
+  const ownerEdges = edges.filter(e => {
+    const rel = (e.relationship || '');
+    return rel === 'parent_of' || rel === 'subsidiary' || rel === 'person_with_significant_control';
+  });
+
+  if (ownerEdges.length === 0) {
+    document.getElementById('ownershipEmpty').style.display = 'block';
+    svgEl.attr('width', 0).attr('height', 0);
+    return;
+  }
+
+  // Build tree from edges
+  const childMap = {};
+  const hasParent = new Set();
+  ownerEdges.forEach(e => {
+    const src = e.source.id || e.source;
+    const tgt = e.target.id || e.target;
+    if (!childMap[src]) childMap[src] = [];
+    childMap[src].push(tgt);
+    hasParent.add(tgt);
+  });
+
+  // Find roots (nodes with children but no parent in this set)
+  const allParents = new Set(Object.keys(childMap));
+  const roots = [...allParents].filter(id => !hasParent.has(id));
+  if (roots.length === 0) roots.push([...allParents][0]);
+
+  // Build hierarchy for d3
+  function buildHier(id, depth) {
+    if (depth > 5) return null;
+    const n = nodes.find(x => x.id === id);
+    const label = n ? n.label : id;
+    const children = (childMap[id] || []).map(c => buildHier(c, depth+1)).filter(Boolean);
+    return { id, name: label.length > 30 ? label.slice(0,28)+'..' : label, _node: n, children: children.length ? children : undefined };
+  }
+
+  const rootData = roots.length === 1
+    ? buildHier(roots[0], 0)
+    : { id: 'root', name: data.metadata.query, children: roots.map(r => buildHier(r, 0)).filter(Boolean) };
+
+  const root = d3.hierarchy(rootData);
+  const treeH = Math.max(300, root.descendants().length * 36);
+  const margin = {top: 30, right: 200, bottom: 30, left: 200};
+  const innerW = w - margin.left - margin.right;
+
+  const treeLayout = d3.tree().size([treeH, innerW]);
+  treeLayout(root);
+
+  svgEl.attr('width', w).attr('height', treeH + margin.top + margin.bottom);
+  const g = svgEl.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Links
+  g.selectAll('.link').data(root.links()).join('path')
+    .attr('class', 'link')
+    .attr('d', d3.linkHorizontal().x(d => d.y).y(d => d.x))
+    .attr('fill', 'none').attr('stroke', 'var(--edge-color)').attr('stroke-width', 1.5);
+
+  // Nodes
+  const node = g.selectAll('.node').data(root.descendants()).join('g')
+    .attr('transform', d => `translate(${d.y},${d.x})`);
+
+  node.append('circle').attr('r', 6)
+    .attr('fill', d => d.data._node ? nodeColor(d.data._node) : 'var(--text-dim)')
+    .attr('stroke', d => d.data._node ? (highlightBorder(d.data._node) || 'none') : 'none')
+    .attr('stroke-width', 2);
+
+  node.append('text')
+    .attr('dy', '0.35em').attr('x', d => d.children ? -10 : 10)
+    .attr('text-anchor', d => d.children ? 'end' : 'start')
+    .attr('fill', 'var(--text)').attr('font-size', '11px')
+    .text(d => d.data.name);
+})();
+
+// ============================================================
+// SOURCE COVERAGE HEATMAP (Tab: coverage)
+// ============================================================
+(function buildCoverageHeatmap() {
+  const container = document.getElementById('coverageContent');
+  const sourceNames = ['icij', 'opensanctions', 'gleif', 'sec', 'companies_house', 'courtlistener'];
+  const sourceLabels = { icij: 'ICIJ', opensanctions: 'Sanctions', gleif: 'GLEIF', sec: 'SEC', companies_house: 'UK Co.', courtlistener: 'Courts' };
+  const sourceColors = { icij: 'var(--icij-color)', opensanctions: 'var(--os-color)', gleif: 'var(--gleif-color)', sec: 'var(--sec-color)', companies_house: 'var(--uk-color)', courtlistener: 'var(--court-color)' };
+
+  // Group nodes by normalized name to find cross-source entities
+  const nameMap = {};
+  nodes.forEach(n => {
+    const norm = n.label.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+    if (!nameMap[norm]) nameMap[norm] = { label: n.label, sources: new Set(), nodes: [], sanctioned: false, pep: false };
+    nameMap[norm].sources.add(n.source);
+    nameMap[norm].nodes.push(n);
+    if (n.sanctioned) nameMap[norm].sanctioned = true;
+    if (n.pep) nameMap[norm].pep = true;
+  });
+
+  // Sort by number of sources (descending), then alphabetically
+  const entries = Object.values(nameMap)
+    .sort((a, b) => b.sources.size - a.sources.size || a.label.localeCompare(b.label))
+    .slice(0, 60);
+
+  // Build HTML table
+  let html = '<table class="matrix-table" style="font-size:12px"><thead><tr><th style="text-align:left;min-width:200px">Entity</th>';
+  sourceNames.forEach(s => { html += `<th style="text-align:center;width:70px;font-size:10px">${sourceLabels[s]}</th>`; });
+  html += '<th style="text-align:center;width:50px">#</th></tr></thead><tbody>';
+
+  entries.forEach(entry => {
+    const sc = entry.sources.size;
+    const rowBg = sc >= 3 ? 'rgba(188,140,255,0.08)' : sc >= 2 ? 'rgba(88,166,255,0.04)' : '';
+    html += `<tr style="background:${rowBg}">`;
+    let nameStyle = '';
+    if (entry.sanctioned) nameStyle = 'color:var(--sanction-color);font-weight:600';
+    else if (entry.pep) nameStyle = 'color:var(--pep-color);font-weight:600';
+    html += `<td style="${nameStyle}">${entry.label.length > 35 ? entry.label.slice(0,33)+'..' : entry.label}</td>`;
+    sourceNames.forEach(s => {
+      if (entry.sources.has(s)) {
+        html += `<td style="text-align:center"><div style="width:16px;height:16px;border-radius:3px;background:${sourceColors[s]};margin:0 auto;opacity:0.85"></div></td>`;
+      } else {
+        html += '<td style="text-align:center"><div style="width:16px;height:16px;border-radius:3px;background:var(--surface-2);margin:0 auto"></div></td>';
+      }
+    });
+    html += `<td style="text-align:center;font-weight:600;color:${sc >= 3 ? 'var(--both-color)' : sc >= 2 ? 'var(--icij-color)' : 'var(--text-dim)'}">${sc}</td>`;
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+})();
+
+// ============================================================
+// MULTI-SOURCE TIMELINE (Tab: multi-timeline)
+// ============================================================
+(function buildMultiTimeline() {
+  const svgEl = d3.select('#multiTimelineSvg');
+  const w = Math.max(document.body.clientWidth - 48, 700);
+  svgEl.attr('width', w);
+
+  // Collect dated events from all sources
+  const events = [];
+
+  // ICIJ investigations
+  const invYears = { 'offshore-leaks': 2013, 'bahamas-leaks': 2016, 'panama-papers': 2016, 'paradise-papers': 2017, 'pandora-papers': 2021 };
+  nodes.forEach(n => {
+    if (n.investigation && invYears[n.investigation]) {
+      events.push({ date: new Date(invYears[n.investigation], 0, 1), label: n.label, source: 'icij', type: n.investigation.replace(/-/g,' ') });
+    }
+  });
+
+  // SEC filings
+  nodes.forEach(n => {
+    if (n.source === 'sec') {
+      const dateStr = (n.datasets || []).length ? null : null;
+      // Check for file_date in various places
+      const fd = n.file_date || (n.properties && n.properties.file_date);
+      if (fd) {
+        const d = new Date(fd);
+        if (!isNaN(d)) events.push({ date: d, label: n.label, source: 'sec', type: 'SEC Filing' });
+      }
+    }
+  });
+
+  // Court cases
+  nodes.forEach(n => {
+    if (n.source === 'courtlistener') {
+      const fd = n.date_filed || (n.properties && n.properties.date_filed);
+      if (fd) {
+        const d = new Date(fd);
+        if (!isNaN(d)) events.push({ date: d, label: n.label, source: 'courtlistener', type: 'Court Case' });
+      }
+    }
+  });
+
+  // Incorporation dates
+  nodes.forEach(n => {
+    if (n.incorporation_date) {
+      const d = new Date(n.incorporation_date);
+      if (!isNaN(d)) events.push({ date: d, label: n.label, source: n.source || 'icij', type: 'Incorporation' });
+    }
+  });
+
+  if (events.length === 0) {
+    svgEl.attr('height', 60);
+    svgEl.append('text').attr('x', 20).attr('y', 30).attr('fill', 'var(--text-dim)').attr('font-size', '13px')
+      .text('No dated events found across sources. Dates from SEC filings and court cases appear when available.');
+    return;
+  }
+
+  // Sort and layout
+  events.sort((a, b) => a.date - b.date);
+  const margin = { top: 40, right: 40, bottom: 40, left: 60 };
+  const innerW = w - margin.left - margin.right;
+  const laneHeight = 28;
+
+  // Group by source for swim lanes
+  const sourceLanes = [...new Set(events.map(e => e.source))];
+  const h = Math.max(250, sourceLanes.length * 80 + margin.top + margin.bottom + 60);
+  svgEl.attr('height', h);
+
+  const innerH = h - margin.top - margin.bottom;
+  const g = svgEl.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleTime()
+    .domain(d3.extent(events, d => d.date))
+    .range([0, innerW])
+    .nice();
+
+  const y = d3.scaleBand()
+    .domain(sourceLanes)
+    .range([0, innerH - 40])
+    .padding(0.3);
+
+  // X axis
+  g.append('g').attr('transform', `translate(0,${innerH - 40})`)
+    .call(d3.axisBottom(x).ticks(8).tickFormat(d3.timeFormat('%Y')))
+    .selectAll('text').attr('fill', 'var(--text-muted)').attr('font-size', '11px');
+  g.selectAll('.domain,.tick line').attr('stroke', 'var(--border)');
+
+  // Lane labels
+  const laneLabels = { icij: 'ICIJ Leaks', opensanctions: 'Sanctions', gleif: 'GLEIF', sec: 'SEC Filings', companies_house: 'UK Companies', courtlistener: 'Court Cases' };
+  sourceLanes.forEach(s => {
+    g.append('text').attr('x', -8).attr('y', y(s) + y.bandwidth() / 2)
+      .attr('dy', '0.35em').attr('text-anchor', 'end')
+      .attr('fill', 'var(--text-muted)').attr('font-size', '11px').attr('font-weight', '600')
+      .text(laneLabels[s] || s);
+    // Lane background
+    g.append('rect').attr('x', 0).attr('y', y(s)).attr('width', innerW).attr('height', y.bandwidth())
+      .attr('fill', 'var(--surface)').attr('rx', 4);
+  });
+
+  // Event dots
+  const srcColors = { icij: 'var(--icij-color)', opensanctions: 'var(--os-color)', gleif: 'var(--gleif-color)', sec: 'var(--sec-color)', companies_house: 'var(--uk-color)', courtlistener: 'var(--court-color)' };
+
+  g.selectAll('.event').data(events).join('circle')
+    .attr('cx', d => x(d.date))
+    .attr('cy', d => y(d.source) + y.bandwidth() / 2)
+    .attr('r', 5)
+    .attr('fill', d => srcColors[d.source] || 'var(--text-dim)')
+    .attr('fill-opacity', 0.8)
+    .attr('stroke', 'var(--bg)').attr('stroke-width', 1)
+    .on('mouseover', (event, d) => {
+      const tip = document.getElementById('tooltip');
+      tip.innerHTML = `<strong>${d.label.slice(0,40)}</strong><br>${d.type}<br>${d.date.toISOString().slice(0,10)}`;
+      tip.classList.add('visible');
+      tip.style.left = (event.clientX + 14) + 'px';
+      tip.style.top = (event.clientY - 14) + 'px';
+    })
+    .on('mouseout', () => document.getElementById('tooltip').classList.remove('visible'));
+})();
+
+// ============================================================
+// CORPORATE STRUCTURE (Tab: corporate)
+// ============================================================
+(function buildCorporateStructure() {
+  const svgEl = d3.select('#corporateSvg');
+  const w = Math.max(document.body.clientWidth - 48, 700);
+
+  // Find corporate relationship edges
+  const corpRels = ['parent_of', 'subsidiary', 'person_with_significant_control', 'intermediary_of', 'co_officer'];
+  const corpEdges = edges.filter(e => corpRels.includes(e.relationship || ''));
+
+  if (corpEdges.length === 0) {
+    document.getElementById('corporateEmpty').style.display = 'block';
+    svgEl.attr('width', 0).attr('height', 0);
+    return;
+  }
+
+  // Build adjacency for a top-down vertical layout
+  const adjDown = {};
+  const hasUp = new Set();
+  corpEdges.forEach(e => {
+    const src = e.source.id || e.source;
+    const tgt = e.target.id || e.target;
+    if (!adjDown[src]) adjDown[src] = [];
+    adjDown[src].push({ id: tgt, rel: e.relationship });
+    hasUp.add(tgt);
+  });
+
+  // Find roots
+  const allNodes = new Set([...Object.keys(adjDown), ...hasUp]);
+  let roots = [...allNodes].filter(id => !hasUp.has(id));
+  if (roots.length === 0) roots = [allNodes.values().next().value];
+
+  // Build hierarchy
+  const visited = new Set();
+  function buildTree(id, depth) {
+    if (depth > 6 || visited.has(id)) return null;
+    visited.add(id);
+    const n = nodes.find(x => x.id === id);
+    const label = n ? n.label : id;
+    const kids = (adjDown[id] || [])
+      .map(c => {
+        const child = buildTree(c.id, depth + 1);
+        if (child) child._rel = c.rel;
+        return child;
+      })
+      .filter(Boolean);
+    return { id, name: label.length > 30 ? label.slice(0, 28) + '..' : label, _node: n, _fullName: label, children: kids.length ? kids : undefined };
+  }
+
+  const rootData = roots.length === 1
+    ? buildTree(roots[0], 0)
+    : { id: '__root', name: data.metadata.query, children: roots.map(r => buildTree(r, 0)).filter(Boolean) };
+
+  if (!rootData || (!rootData.children && rootData.id === '__root')) {
+    document.getElementById('corporateEmpty').style.display = 'block';
+    return;
+  }
+
+  const root = d3.hierarchy(rootData);
+  const margin = { top: 40, right: 40, bottom: 40, left: 40 };
+  const nodeW = 180;
+  const nodeH = 50;
+  const treeLayout = d3.tree().nodeSize([nodeW + 20, nodeH + 40]);
+  treeLayout(root);
+
+  // Compute bounds
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  root.each(d => {
+    if (d.x < minX) minX = d.x;
+    if (d.x > maxX) maxX = d.x;
+    if (d.y < minY) minY = d.y;
+    if (d.y > maxY) maxY = d.y;
+  });
+
+  const svgW = maxX - minX + nodeW + margin.left + margin.right;
+  const svgH = maxY - minY + nodeH + margin.top + margin.bottom + 40;
+  svgEl.attr('width', Math.max(w, svgW)).attr('height', svgH);
+
+  const g = svgEl.append('g')
+    .attr('transform', `translate(${-minX + margin.left + nodeW/2},${margin.top})`);
+
+  // Links (vertical)
+  g.selectAll('.corp-link').data(root.links()).join('path')
+    .attr('d', d => {
+      const sx = d.source.x, sy = d.source.y + nodeH/2;
+      const tx = d.target.x, ty = d.target.y - nodeH/2;
+      const my = (sy + ty) / 2;
+      return `M${sx},${sy} C${sx},${my} ${tx},${my} ${tx},${ty}`;
+    })
+    .attr('fill', 'none').attr('stroke', 'var(--edge-color)').attr('stroke-width', 1.5);
+
+  // Edge labels
+  g.selectAll('.corp-edge-label').data(root.links()).join('text')
+    .attr('x', d => (d.source.x + d.target.x) / 2)
+    .attr('y', d => (d.source.y + d.target.y) / 2)
+    .attr('text-anchor', 'middle').attr('fill', 'var(--text-dim)').attr('font-size', '9px')
+    .text(d => {
+      const rel = d.target.data._rel || '';
+      const labels = { parent_of: 'parent', subsidiary: 'subsidiary', person_with_significant_control: 'PSC', intermediary_of: 'intermediary', co_officer: 'co-officer' };
+      return labels[rel] || rel.replace(/_/g, ' ');
+    });
+
+  // Node cards
+  const nodeG = g.selectAll('.corp-node').data(root.descendants()).join('g')
+    .attr('transform', d => `translate(${d.x - nodeW/2},${d.y - nodeH/2})`);
+
+  nodeG.append('rect')
+    .attr('width', nodeW).attr('height', nodeH).attr('rx', 6)
+    .attr('fill', 'var(--surface)')
+    .attr('stroke', d => {
+      if (!d.data._node) return 'var(--border)';
+      return highlightBorder(d.data._node) || nodeColor(d.data._node);
+    })
+    .attr('stroke-width', d => d.data._node && highlightBorder(d.data._node) ? 2.5 : 1.5);
+
+  // Source indicator stripe at top of card
+  nodeG.append('rect')
+    .attr('width', nodeW).attr('height', 4).attr('rx', 2)
+    .attr('fill', d => d.data._node ? nodeColor(d.data._node) : 'var(--border)');
+
+  // Name
+  nodeG.append('text')
+    .attr('x', nodeW/2).attr('y', nodeH/2 + 2)
+    .attr('text-anchor', 'middle').attr('fill', 'var(--text)').attr('font-size', '11px').attr('font-weight', '500')
+    .text(d => d.data.name);
+
+  // Type label below name
+  nodeG.append('text')
+    .attr('x', nodeW/2).attr('y', nodeH/2 + 16)
+    .attr('text-anchor', 'middle').attr('fill', 'var(--text-dim)').attr('font-size', '9px')
+    .text(d => {
+      if (!d.data._node) return '';
+      const parts = [];
+      if (d.data._node.type) parts.push(d.data._node.type);
+      const src = { icij: 'ICIJ', opensanctions: 'Sanctions', gleif: 'GLEIF', sec: 'SEC', companies_house: 'UK Co.', courtlistener: 'Court' };
+      if (d.data._node.source) parts.push(src[d.data._node.source] || d.data._node.source);
+      return parts.join(' · ');
+    });
+})();
+
+// ============================================================
+// FILTERS
+// ============================================================
+// Hop slider
+const hopSlider = document.getElementById('hopSlider');
+const hopLabel = document.getElementById('hopLabel');
+hopSlider.max = Math.max(maxHop, 1);
+hopSlider.value = hopSlider.max;
+hopLabel.textContent = maxHop > 0 ? 'all' : '0';
+hopSlider.addEventListener('input', () => {
+  hopLabel.textContent = hopSlider.value == hopSlider.max ? 'all' : hopSlider.value;
+  applyFilters();
+});
+
+function applyFilters() {
+  const showIcij=document.getElementById('toggleIcij').checked;
+  const showOs=document.getElementById('toggleOs').checked;
+  const showAddr=document.getElementById('toggleAddresses').checked;
+  const search=document.getElementById('searchInput').value.toLowerCase();
+  const maxVisibleHop = parseInt(hopSlider.value);
+  node.attr('display',d=>{
+    if((d.hop||0)>maxVisibleHop)return'none';
+    if(!showIcij&&d.source==='icij')return'none';
+    if(!showOs&&d.source==='opensanctions')return'none';
+    if(!showAddr&&isAddress(d))return'none';
+    if(search&&!d.label.toLowerCase().includes(search))return'none';
+    return null;
+  });
+  const vis=new Set();
+  node.each(function(d){if(d3.select(this).attr('display')!=='none')vis.add(d.id);});
+  link.attr('display',d=>{
+    const s=d.source.id||d.source,t=d.target.id||d.target;
+    return vis.has(s)&&vis.has(t)?null:'none';
+  });
+  edgeLabel.attr('display',d=>{
+    const s=d.source.id||d.source,t=d.target.id||d.target;
+    return vis.has(s)&&vis.has(t)?null:'none';
+  });
+}
+document.getElementById('toggleIcij').addEventListener('change',applyFilters);
+document.getElementById('toggleOs').addEventListener('change',applyFilters);
+document.getElementById('toggleAddresses').addEventListener('change',applyFilters);
+document.getElementById('searchInput').addEventListener('input',applyFilters);
+applyFilters();
+</script>
+</body>
+</html>

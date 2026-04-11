@@ -1,5 +1,7 @@
 """ICIJ Offshore Leaks API client."""
 
+from __future__ import annotations
+
 import httpx
 from typing import Any
 
@@ -23,7 +25,7 @@ class ICIJClient:
         self._client = httpx.AsyncClient(
             base_url=BASE_URL,
             timeout=timeout,
-            headers={"User-Agent": "icij-mcp/0.1.0"},
+            headers={"User-Agent": "sift/0.4.0"},
         )
 
     async def close(self):
