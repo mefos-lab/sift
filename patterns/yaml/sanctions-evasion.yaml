@@ -1,0 +1,53 @@
+name: sanctions_evasion
+title: Sanctions Evasion Structure
+description: >
+  Offshore arrangement maintaining financial system access for a
+  sanctioned person while routing around sanctions through
+  intermediary layers. Nominees, shells, or professional
+  intermediaries obscure the sanctioned person's connection.
+risk_level: CRITICAL
+status: CONFIRMED
+sources:
+  - fatf_bo_concealment_2018
+  - fincen_files
+  - wolfsberg_cbddq
+
+detection:
+  conditions:
+    - id: sanctioned_connection
+      description: >
+        Entity officer or connected person matches sanctioned entry
+        in OpenSanctions within 3 hops
+      type: cross_source_match
+      icij_field: officer_name
+      opensanctions_topic: sanction
+      max_hops: 3
+
+    - id: post_designation_formation
+      description: >
+        Entity formed after the connected person's sanctions
+        designation date
+      type: temporal_sequence
+      entity_date: incorporation_date
+      reference_date: sanctions_designation_date
+      entity_after_reference: true
+
+    - id: nominee_interposition
+      description: Nominee layers between sanctioned person and entity
+      type: path_analysis
+      min_intermediary_layers: 1
+
+  indicators:
+    - Entity created after sanctions designation date
+    - Banking in jurisdiction with weaker sanctions enforcement
+    - High-secrecy entity jurisdiction
+    - Professional intermediary with no due diligence obligations
+    - FATF Annex E - nominees concealing sanctioned persons
+    - Wolfsberg - shell bank prohibition applies
+
+  scoring:
+    high: sanctioned_connection
+    medium: null
+    low: null
+
+  data_sources: [icij, opensanctions, companies_house, gleif]

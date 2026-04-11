@@ -1,0 +1,47 @@
+name: matryoshka
+title: The Matryoshka
+description: >
+  Nested chain of shell companies across jurisdictions, each owning
+  the next, creating layers of opacity between the beneficial owner
+  and the assets.
+risk_level: HIGH
+status: ESTABLISHED
+sources:
+  - fatf_bo_concealment_2018
+  - panama_papers
+  - paradise_papers
+  - pandora_papers
+
+detection:
+  conditions:
+    - id: chain_depth
+      description: Entity-owns-entity chain of 3+ hops
+      type: path_length
+      relationship: [owns, intermediary_of, parent_of]
+      min_length: 3
+
+    - id: jurisdiction_diversity
+      description: Chain spans 3+ different jurisdictions
+      type: jurisdiction_count
+      scope: chain
+      min_count: 3
+
+    - id: shared_intermediary
+      description: Same intermediary at multiple layers of the chain
+      type: shared_node
+      node_type: Intermediary
+      scope: chain
+      min_occurrences: 2
+
+  indicators:
+    - Same formation agent at each layer
+    - Entities have no visible commercial activity
+    - Bearer shares or nominee shareholders present
+    - High-secrecy jurisdictions (BVI, Seychelles, Panama)
+
+  scoring:
+    high: all_conditions_met
+    medium: [chain_depth, jurisdiction_diversity]
+    low: chain_depth
+
+  data_sources: [icij, gleif, companies_house]

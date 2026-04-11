@@ -1,0 +1,140 @@
+# Sift Pattern Library — Machine-Readable Detection Rules
+#
+# 18 patterns derived from:
+# - FATF Money Laundering Typologies (2018, 2020, 2023)
+# - FATF-Egmont Concealment of Beneficial Ownership (2018)
+# - Moody's Seven Indicators of Shell Company Risk
+# - ICIJ investigation methodology (Panama/Paradise/Pandora Papers)
+# - FinCEN Files analysis
+# - Wolfsberg Group Correspondent Banking Standards
+# - Network analysis for AML (academic literature)
+# - UK National Risk Assessment 2025
+# - EU Anti-Money Laundering Directives (AMLD 4/5/6)
+# - Transparency International shell company research
+#
+# Pattern lifecycle:
+#   PROPOSED   — identified in a single investigation
+#   CONFIRMED  — observed in 2+ independent investigations
+#   ESTABLISHED — observed across multiple leak datasets or sources
+
+patterns:
+
+  # === Structural Patterns (from ICIJ investigations) ===
+
+  - file: matryoshka.yaml
+    name: matryoshka
+    risk: HIGH
+    status: ESTABLISHED
+    summary: Nested shell company chain across 3+ jurisdictions
+
+  - file: starburst.yaml
+    name: starburst
+    risk: MEDIUM
+    status: ESTABLISHED
+    summary: Hub-and-spoke — one officer connected to 10+ entities
+
+  - file: mirror.yaml
+    name: mirror
+    risk: MEDIUM
+    status: CONFIRMED
+    summary: Parallel entities in different jurisdictions, same officers
+
+  - file: intermediary-cluster.yaml
+    name: intermediary_cluster
+    risk: MEDIUM
+    status: ESTABLISHED
+    summary: Single formation agent managing 20+ entities
+
+  - file: nominee-shield.yaml
+    name: nominee_shield
+    risk: HIGH
+    status: ESTABLISHED
+    summary: Professional nominee directors across 20+ unrelated entities
+
+  - file: regulatory-arbitrage-chain.yaml
+    name: regulatory_arbitrage_chain
+    risk: HIGH
+    status: CONFIRMED
+    summary: Chain mixing regulated + secrecy jurisdictions
+
+  - file: temporal-cluster.yaml
+    name: temporal_cluster
+    risk: MEDIUM
+    status: CONFIRMED
+    summary: 3+ entities formed within 30 days with shared infrastructure
+
+  # === Sanctions & PEP Patterns ===
+
+  - file: sanctions-evasion.yaml
+    name: sanctions_evasion
+    risk: CRITICAL
+    status: CONFIRMED
+    summary: Offshore structure connected to sanctioned person within 3 hops
+
+  - file: pep-opacity-layer.yaml
+    name: pep_opacity_layer
+    risk: HIGH
+    status: CONFIRMED
+    summary: PEP's family/associates as officers, PEP name absent
+
+  # === Graph Topology Patterns (from academic research) ===
+
+  - file: circular-ownership.yaml
+    name: circular_ownership
+    risk: HIGH
+    status: CONFIRMED
+    summary: Directed ownership cycle of length 5 or less
+
+  - file: scatter-gather.yaml
+    name: scatter_gather
+    risk: HIGH
+    status: CONFIRMED
+    summary: Fan-out then fan-in through different intermediaries (X-pattern)
+
+  - file: network-chokepoint.yaml
+    name: network_chokepoint
+    risk: HIGH
+    status: CONFIRMED
+    summary: Node with 95th-percentile betweenness centrality
+
+  # === Shell Company Indicators (from Moody's / FATF) ===
+
+  - file: shell-company-indicators.yaml
+    name: shell_company_indicators
+    risk: MEDIUM
+    status: ESTABLISHED
+    summary: Moody's seven-factor shell company screen
+
+  - file: mass-registration.yaml
+    name: mass_registration
+    risk: MEDIUM
+    status: ESTABLISHED
+    summary: 10+ entities at same registered address
+
+  - file: beneficial-ownership-gap.yaml
+    name: beneficial_ownership_gap
+    risk: MEDIUM
+    status: ESTABLISHED
+    summary: Entity with no disclosed beneficial owner
+
+  # === UK-Specific Typologies (from UK NRA 2025) ===
+
+  - file: llp-opacity-vehicle.yaml
+    name: llp_opacity_vehicle
+    risk: HIGH
+    status: CONFIRMED
+    summary: UK LLP with corporate partners in secrecy jurisdictions
+
+  - file: rapid-dissolution.yaml
+    name: rapid_dissolution
+    risk: HIGH
+    status: CONFIRMED
+    summary: Entity dissolved within 2 years, foreign directors only
+
+  # === Cross-Source Patterns (multi-database) ===
+
+  - file: cross-source-corroboration.yaml
+    name: cross_source_corroboration
+    risk: HIGH
+    status: ESTABLISHED
+    summary: Same entity flagged in 3+ independent databases

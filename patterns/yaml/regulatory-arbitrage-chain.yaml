@@ -1,0 +1,47 @@
+name: regulatory_arbitrage_chain
+title: Regulatory Arbitrage Chain
+description: >
+  Entities positioned to exploit gaps between jurisdictions'
+  reporting, tax, or sanctions requirements. Transactions routed
+  through the jurisdiction with the weakest applicable rule at
+  each stage. Typically includes one EU/OECD jurisdiction for
+  banking access and one or more high-secrecy jurisdictions
+  for opacity.
+risk_level: HIGH
+status: CONFIRMED
+sources:
+  - fatf_bo_concealment_2018
+  - eu_amld_annex_iii
+  - panama_papers
+  - pandora_papers
+
+detection:
+  conditions:
+    - id: mixed_jurisdiction_chain
+      description: >
+        Chain includes both EU/OECD jurisdiction (banking access)
+        and high-secrecy jurisdiction (opacity)
+      type: jurisdiction_mix
+      requires_regulated: true
+      requires_secrecy: true
+      regulated_jurisdictions: [GB, DE, FR, NL, CH, US, SG, HK]
+      secrecy_jurisdictions: [VG, PA, SC, KY, BZ, WS, MH]
+
+    - id: no_operational_nexus
+      description: Entity in jurisdiction with no connection to business
+      type: jurisdiction_mismatch
+      entity_jurisdiction_differs_from: [officer_country, business_activity]
+
+  indicators:
+    - Entity formation in low-regulation jurisdiction
+    - Bank accounts in high-regulation jurisdiction
+    - EU AMLD Annex III - geographic risk factors
+    - Transactions routed through intermediate jurisdictions
+    - FATF grey/black list jurisdiction in chain
+
+  scoring:
+    high: [mixed_jurisdiction_chain, no_operational_nexus]
+    medium: mixed_jurisdiction_chain
+    low: no_operational_nexus
+
+  data_sources: [icij, gleif, companies_house]

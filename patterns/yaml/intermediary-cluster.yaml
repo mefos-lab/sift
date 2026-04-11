@@ -1,0 +1,47 @@
+name: intermediary_cluster
+title: The Intermediary Cluster
+description: >
+  A single intermediary (law firm, registered agent, TCSP) serving
+  as formation agent for a cluster of entities with shared beneficial
+  ownership obscured by the intermediary's consolidating role.
+risk_level: MEDIUM
+status: ESTABLISHED
+sources:
+  - fatf_bo_concealment_2018
+  - panama_papers_mossack_fonseca
+  - paradise_papers_appleby
+  - uk_nra_2025
+
+detection:
+  conditions:
+    - id: intermediary_concentration
+      description: Single intermediary connected to 20+ entities
+      type: node_degree
+      node_type: Intermediary
+      relationship: intermediary_of
+      min_degree: 20
+
+    - id: shared_address
+      description: Entities sharing the intermediary's address
+      type: address_clustering
+      min_entities_per_address: 10
+
+    - id: temporal_formation
+      description: Multiple entities formed within 30-day window
+      type: temporal_cluster
+      window_days: 30
+      min_entities: 3
+      scope: intermediary_clients
+
+  indicators:
+    - TCSP not registered with AML supervisory authority
+    - Intermediary managing entities in multiple secrecy jurisdictions
+    - Client entities dissolved within 2 years of formation
+    - UK NRA rates TCSPs as HIGH risk
+
+  scoring:
+    high: all_conditions_met
+    medium: [intermediary_concentration, shared_address]
+    low: intermediary_concentration
+
+  data_sources: [icij, companies_house]

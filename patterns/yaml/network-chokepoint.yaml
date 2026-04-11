@@ -1,0 +1,42 @@
+name: network_chokepoint
+title: Network Chokepoint
+description: >
+  Node with high betweenness centrality — serves as a bridge
+  or chokepoint that many paths pass through. Academic research
+  found that ML coordinators consistently have betweenness
+  centrality in the 95th+ percentile. These nodes are critical
+  for the network's function and are high-value investigation
+  targets.
+risk_level: HIGH
+status: CONFIRMED
+sources:
+  - network_analysis_aml_literature
+  - aml_graph_analytics
+
+detection:
+  conditions:
+    - id: high_betweenness
+      description: Betweenness centrality in 95th percentile of subgraph
+      type: centrality
+      metric: betweenness
+      percentile: 95
+
+    - id: bridge_role
+      description: >
+        Removing this node disconnects significant portions of
+        the network (articulation point)
+      type: articulation_point
+
+  indicators:
+    - Node connects otherwise separate clusters
+    - High betweenness but moderate degree (not just highly connected)
+    - Intermediary or officer type
+    - Connected to nodes in multiple jurisdictions
+    - PageRank elevated by connections to sanctioned/PEP nodes
+
+  scoring:
+    high: [high_betweenness, bridge_role]
+    medium: high_betweenness
+    low: null
+
+  data_sources: [icij, gleif, companies_house]

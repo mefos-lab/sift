@@ -1,0 +1,40 @@
+name: mirror
+title: The Mirror
+description: >
+  Parallel entities in different jurisdictions with identical or
+  near-identical officers, providing redundancy and jurisdictional
+  optionality. If one jurisdiction tightens regulation, operations
+  shift to the mirror entity.
+risk_level: MEDIUM
+status: CONFIRMED
+sources:
+  - panama_papers
+  - pandora_papers
+
+detection:
+  conditions:
+    - id: shared_officers
+      description: >
+        Two entities in different jurisdictions sharing 2+ officers
+      type: officer_overlap
+      min_shared_officers: 2
+      different_jurisdictions: true
+
+    - id: name_similarity
+      description: Entity names similar (same stem, different suffix)
+      type: name_match
+      similarity_threshold: 0.8
+      different_jurisdictions: true
+
+  indicators:
+    - Similar entity names with jurisdiction-specific suffixes (Ltd vs Inc vs SA)
+    - Identical officer lists
+    - Same intermediary for both entities
+    - Formation dates within 30 days
+
+  scoring:
+    high: [shared_officers, name_similarity]
+    medium: shared_officers
+    low: name_similarity
+
+  data_sources: [icij, gleif, companies_house]

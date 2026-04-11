@@ -1,0 +1,41 @@
+name: circular_ownership
+title: Circular Ownership
+description: >
+  Entity A owns Entity B which owns Entity C which owns Entity A
+  (or shorter cycles). Used for round-tripping funds, inflating
+  asset values, or obscuring ultimate beneficial ownership.
+  Any directed cycle of length 5 or less is a red flag.
+risk_level: HIGH
+status: CONFIRMED
+sources:
+  - fatf_bo_concealment_2018
+  - network_analysis_aml_literature
+  - moodys_shell_indicators
+
+detection:
+  conditions:
+    - id: ownership_cycle
+      description: Directed cycle in ownership graph of length <= 5
+      type: cycle_detection
+      relationship: [owns, parent_of, subsidiary, officer_of]
+      max_cycle_length: 5
+
+    - id: cross_jurisdiction_cycle
+      description: Cycle spans multiple jurisdictions
+      type: jurisdiction_count
+      scope: cycle
+      min_count: 2
+      optional: true
+
+  indicators:
+    - Entity appears as both parent and subsidiary in ownership chain
+    - PSC entity is itself controlled by the filing company
+    - Funds circulating through entities with no external business purpose
+    - FATF Annex E - circular structures
+
+  scoring:
+    high: ownership_cycle
+    medium: null
+    low: null
+
+  data_sources: [icij, gleif, companies_house]

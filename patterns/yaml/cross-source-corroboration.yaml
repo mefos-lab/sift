@@ -1,0 +1,49 @@
+name: cross_source_corroboration
+title: Cross-Source Corroboration
+description: >
+  Entity or person appearing in 3+ independent data sources.
+  Each additional independent source that flags the same entity
+  dramatically increases the probability of genuine risk.
+  A person in ICIJ + OpenSanctions + CourtListener represents
+  offshore exposure + sanctions/PEP status + active litigation —
+  three independent signals converging.
+risk_level: HIGH
+status: ESTABLISHED
+sources:
+  - investigative_methodology
+  - icij_cross_dataset_linking
+
+detection:
+  conditions:
+    - id: triple_source
+      description: Same entity/person found in 3+ databases
+      type: source_count
+      min_sources: 3
+      sources: [icij, opensanctions, gleif, sec, companies_house, courtlistener]
+
+    - id: sanctions_plus_offshore
+      description: Entity in both ICIJ and OpenSanctions (sanctions topic)
+      type: cross_source_match
+      source_a: icij
+      source_b: opensanctions
+      opensanctions_topic: sanction
+
+    - id: litigation_plus_offshore
+      description: Person in both ICIJ and CourtListener
+      type: cross_source_match
+      source_a: icij
+      source_b: courtlistener
+
+  indicators:
+    - Same name in ICIJ offshore leaks + sanctions list
+    - Same name in ICIJ + court records (criminal or civil)
+    - Same company in GLEIF + ICIJ (legitimate entity with offshore arm)
+    - Same person in SEC enforcement + ICIJ
+    - ICIJ cross-dataset linking (entity in multiple leaks)
+
+  scoring:
+    high: [triple_source, sanctions_plus_offshore]
+    medium: triple_source
+    low: sanctions_plus_offshore
+
+  data_sources: [icij, opensanctions, gleif, sec, companies_house, courtlistener]

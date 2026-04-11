@@ -1,0 +1,50 @@
+name: beneficial_ownership_gap
+title: Beneficial Ownership Gap
+description: >
+  Entity with no disclosed beneficial owner. FinCEN Files found
+  that in 50% of SARs, banks lacked information on one or more
+  entities behind transactions. FATF-Egmont (2018) identifies
+  this as the most fundamental red flag — legitimate businesses
+  have identifiable owners. EU AMLD requires tracing through all
+  layers until a natural person is identified.
+risk_level: MEDIUM
+status: ESTABLISHED
+sources:
+  - fincen_files
+  - fatf_bo_concealment_2018
+  - eu_amld_4_5_6
+
+detection:
+  conditions:
+    - id: no_officer_links
+      description: Entity has no officer_of relationships in ICIJ
+      type: missing_relationship
+      node_type: Entity
+      relationship: officer_of
+      direction: incoming
+
+    - id: no_psc_filed
+      description: UK company with no PSC filing
+      type: missing_field
+      field: persons_with_significant_control
+      source: companies_house
+
+    - id: no_gleif_ubo
+      description: GLEIF record with no parent/UBO reported
+      type: missing_field
+      field: ultimate_parent
+      source: gleif
+
+  indicators:
+    - Entity in ICIJ with no linked officers
+    - Companies House entity with no PSC declaration
+    - GLEIF record with no ownership relationship
+    - Corporate owners at every layer (no natural person reached)
+    - EU AMLD - obligation to trace to natural person
+
+  scoring:
+    high: [no_officer_links, no_psc_filed]
+    medium: no_officer_links
+    low: no_gleif_ubo
+
+  data_sources: [icij, companies_house, gleif]

@@ -1,0 +1,66 @@
+name: shell_company_indicators
+title: Shell Company Seven-Factor Screen
+description: >
+  Moody's operationalized seven specific indicators that collectively
+  identify likely shell companies. Any single factor is a weak signal;
+  3+ factors together are strongly indicative. Derived from analysis
+  of millions of corporate registrations globally.
+risk_level: MEDIUM
+status: ESTABLISHED
+sources:
+  - moodys_shell_indicators
+  - fatf_bo_concealment_2018
+  - financial_crime_academy
+
+detection:
+  conditions:
+    - id: atypical_directorships
+      description: Officer holds 20+ directorships
+      type: node_degree
+      node_type: [Officer, Person]
+      min_degree: 20
+
+    - id: mass_address
+      description: Registered at address with 10+ other entities
+      type: address_clustering
+      min_entities_per_address: 10
+
+    - id: secrecy_jurisdiction
+      description: Registered in high-secrecy jurisdiction
+      type: jurisdiction_risk
+      jurisdictions: [VG, SC, PA, KY, WS, KN, BZ, MH]
+
+    - id: dormancy
+      description: No financial activity or dormant accounts filed
+      type: entity_status
+      statuses: [dormant, inactive, dissolved]
+
+    - id: no_beneficial_owner
+      description: No beneficial owner disclosed
+      type: missing_field
+      field: beneficial_owner
+      node_type: Entity
+
+    - id: financial_anomaly
+      description: Revenue inconsistent with entity profile
+      type: financial_check
+      check: revenue_vs_employees
+
+    - id: circular_ownership
+      description: Entity appears in ownership cycle
+      type: cycle_detection
+      max_cycle_length: 5
+
+  indicators:
+    - Corporate director (company as director of company)
+    - Bearer shares or bearer instruments
+    - Recently formed with no operating history
+    - Director age anomalies
+    - Ownership more complex than business requires
+
+  scoring:
+    high: 4_or_more_conditions
+    medium: 3_conditions
+    low: 2_conditions
+
+  data_sources: [icij, companies_house, gleif, sec]

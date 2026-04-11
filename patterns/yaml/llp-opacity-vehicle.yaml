@@ -1,0 +1,50 @@
+name: llp_opacity_vehicle
+title: LLP Opacity Vehicle
+description: >
+  UK Limited Liability Partnerships used as opacity vehicles.
+  Transparency International found 14% of UK LLPs (21,002) showed
+  3+ money laundering red flags. LLPs controlled by corporate
+  partners in secrecy jurisdictions are particularly high risk.
+  UK NRA 2025 rates this as a significant domestic typology.
+risk_level: HIGH
+status: CONFIRMED
+sources:
+  - uk_nra_2025
+  - transparency_international_llp_report
+  - occrp
+
+detection:
+  conditions:
+    - id: corporate_partners_secrecy
+      description: >
+        LLP with corporate partners registered in secrecy
+        jurisdictions (Belize, Seychelles, etc.)
+      type: entity_type_match
+      entity_type: LLP
+      partner_jurisdictions: [BZ, SC, MH, WS, PA]
+
+    - id: mass_address_llp
+      description: LLP registered at address with hundreds of other LLPs
+      type: address_clustering
+      entity_type: LLP
+      min_entities_per_address: 50
+
+    - id: no_uk_individual
+      description: No UK-based individual partner
+      type: missing_field
+      field: uk_individual_partner
+      entity_type: LLP
+
+  indicators:
+    - Corporate partners in high-risk jurisdictions
+    - Registered at address with hundreds of identical LLPs
+    - No UK-based individual partners
+    - Dormant accounts filed
+    - TI found 21,002 LLPs with 3+ red flags
+
+  scoring:
+    high: [corporate_partners_secrecy, mass_address_llp]
+    medium: corporate_partners_secrecy
+    low: mass_address_llp
+
+  data_sources: [companies_house]

@@ -1,0 +1,49 @@
+name: scatter_gather
+title: Scatter-Gather (X-Pattern)
+description: >
+  Funds or ownership dispersed from one source to multiple
+  intermediaries (scatter/fan-out), then reconverged to a
+  different destination (gather/fan-in). Classic layering
+  technique. The X-pattern variant uses different intermediaries
+  for scatter and gather phases.
+risk_level: HIGH
+status: CONFIRMED
+sources:
+  - network_analysis_aml_literature
+  - fatf_trade_based_ml_2020
+  - tigergraph_aml_analytics
+
+detection:
+  conditions:
+    - id: fan_out
+      description: Source node dispersing to 5+ recipients
+      type: node_degree
+      direction: outgoing
+      min_degree: 5
+
+    - id: fan_in
+      description: Destination node receiving from 5+ sources
+      type: node_degree
+      direction: incoming
+      min_degree: 5
+
+    - id: x_pattern
+      description: >
+        3+ paths from source A reach destination B through
+        different intermediaries
+      type: multi_path
+      min_paths: 3
+      max_hop_length: 3
+
+  indicators:
+    - Intermediary entities have no independent business purpose
+    - Scatter and gather phases use different jurisdictions
+    - Time between scatter and gather is short (days/weeks)
+    - Intermediary entities dissolved after the gather phase
+
+  scoring:
+    high: x_pattern
+    medium: [fan_out, fan_in]
+    low: fan_out
+
+  data_sources: [icij, gleif]

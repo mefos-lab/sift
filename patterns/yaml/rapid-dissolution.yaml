@@ -1,0 +1,49 @@
+name: rapid_dissolution
+title: Rapid Dissolution (Single-Use Shell)
+description: >
+  Entity incorporated, used for a single transaction or series,
+  then dissolved within 2 years. The Russian Laundromat and Bottle
+  Laundromat investigations found UK shell companies created just
+  before entering trade deals and closed shortly after. FinCEN
+  Files confirmed this as a common SAR narrative pattern.
+risk_level: HIGH
+status: CONFIRMED
+sources:
+  - fincen_files
+  - transparency_international_bottle_laundromat
+  - uk_nra_2025
+
+detection:
+  conditions:
+    - id: short_lifespan
+      description: Entity dissolved within 2 years of incorporation
+      type: temporal_range
+      field_start: incorporation_date
+      field_end: dissolution_date
+      max_days: 730
+
+    - id: foreign_directors
+      description: Directors/PSCs exclusively in foreign jurisdictions
+      type: jurisdiction_mismatch
+      entity_jurisdiction: GB
+      officer_jurisdictions_exclude: GB
+
+    - id: no_accounts
+      description: No financial accounts filed during entity lifespan
+      type: missing_field
+      field: accounts_filed
+      optional: true
+
+  indicators:
+    - Incorporated and dissolved within 2 years
+    - Foreign directors with no UK connection
+    - No accounts or dormant accounts only
+    - Formation agent managed multiple similar entities
+    - Entity name generic or meaningless
+
+  scoring:
+    high: [short_lifespan, foreign_directors]
+    medium: short_lifespan
+    low: null
+
+  data_sources: [companies_house, icij]

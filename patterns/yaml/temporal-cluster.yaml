@@ -1,0 +1,49 @@
+name: temporal_cluster
+title: Temporal Cluster
+description: >
+  A burst of entity formations within a short time window,
+  often correlating with external events — sanctions announcements,
+  elections, regulatory changes, or personal events. Academic
+  research confirms temporal co-registration by the same agent
+  is statistically predictive of shared hidden beneficial ownership.
+risk_level: MEDIUM
+status: CONFIRMED
+sources:
+  - fatf_bo_concealment_2018
+  - shell_company_network_springer_2023
+  - panama_papers
+  - pandora_papers
+
+detection:
+  conditions:
+    - id: formation_burst
+      description: 3+ entities formed within 30-day window
+      type: temporal_cluster
+      window_days: 30
+      min_entities: 3
+
+    - id: shared_infrastructure
+      description: Burst entities share intermediary or address
+      type: shared_node
+      node_type: [Intermediary, Address]
+      scope: temporal_cluster
+
+    - id: event_correlation
+      description: Formation dates correlate with sanctions or political events
+      type: event_proximity
+      event_sources: [opensanctions_designation_dates]
+      window_days: 90
+      optional: true
+
+  indicators:
+    - Multiple entities created within same week by same agent
+    - Formation dates coincide with sanctions announcements
+    - Formation dates coincide with elections or regulatory changes
+    - Entities dissolved shortly after formation (single-use shells)
+
+  scoring:
+    high: [formation_burst, shared_infrastructure, event_correlation]
+    medium: [formation_burst, shared_infrastructure]
+    low: formation_burst
+
+  data_sources: [icij, companies_house, gleif, opensanctions]

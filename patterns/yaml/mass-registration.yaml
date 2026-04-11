@@ -1,0 +1,41 @@
+name: mass_registration
+title: Mass Registration Address
+description: >
+  Multiple entities registered at the same physical address.
+  Moody's found addresses hosting 22,000+ registrations.
+  Mass-registration addresses are a primary indicator of shell
+  company infrastructure. Legitimate shared offices exist but
+  rarely exceed 50 entities.
+risk_level: MEDIUM
+status: ESTABLISHED
+sources:
+  - moodys_shell_indicators
+  - transparency_international
+  - uk_nra_2025
+
+detection:
+  conditions:
+    - id: address_density
+      description: Address shared by 10+ entities
+      type: address_clustering
+      min_entities_per_address: 10
+
+    - id: high_density
+      description: Address shared by 100+ entities (definitive shell infra)
+      type: address_clustering
+      min_entities_per_address: 100
+      optional: true
+
+  indicators:
+    - Address is a registered agent office, not an operational business
+    - Entities at address span multiple unrelated industries
+    - Entities at address share no officers (independent shell registrations)
+    - UK Companies House - address with 100+ active companies
+    - Moody's found strip malls with 61,000 registrations
+
+  scoring:
+    high: high_density
+    medium: address_density
+    low: null
+
+  data_sources: [icij, companies_house, gleif]
