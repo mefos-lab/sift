@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -69,7 +70,29 @@ _US_STATES = {
 }
 
 
-def normalize_graph(nodes: dict, edges: list) -> tuple[dict, list]:
+@dataclass
+class NormalizationLog:
+    """Record of what was changed during normalization."""
+    countries_extracted: int = 0
+    addresses_classified: int = 0
+    duplicates_merged: list = field(default_factory=list)
+    cross_source_merged: list = field(default_factory=list)
+
+    @property
+    def total_merged(self) -> int:
+        return len(self.duplicates_merged) + len(self.cross_source_merged)
+
+    def to_dict(self) -> dict:
+        return {
+            "countries_extracted": self.countries_extracted,
+            "addresses_classified": self.addresses_classified,
+            "duplicates_merged": self.duplicates_merged,
+            "cross_source_merged": self.cross_source_merged,
+            "total_merged": self.total_merged,
+        }
+
+
+def normalize_graph(nodes: dict, edges: list) -> tuple[dict, list, NormalizationLog]:
     """Normalize a traversal graph: deduplicate, classify, merge, extract.
 
     Parameters
@@ -79,30 +102,35 @@ def normalize_graph(nodes: dict, edges: list) -> tuple[dict, list]:
 
     Returns
     -------
-    (normalized_nodes, normalized_edges) — same types, deduplicated and enriched
+    (normalized_nodes, normalized_edges, log) — deduplicated, enriched, with audit trail
     """
+    log = NormalizationLog()
+
     # Step 1: Extract countries from address labels
-    _enrich_countries(nodes)
+    log.countries_extracted = _enrich_countries(nodes)
 
     # Step 2: Classify nodes (is this an address, a person, a real entity?)
-    _classify_nodes(nodes)
+    log.addresses_classified = _classify_nodes(nodes)
 
     # Step 3: Deduplicate by normalized name + type
-    id_remap = _deduplicate(nodes)
+    id_remap, dedup_log = _deduplicate(nodes)
+    log.duplicates_merged = dedup_log
 
     # Step 4: Rewrite edges through merged IDs
     edges = _rewrite_edges(edges, id_remap, nodes)
 
     # Step 5: Merge cross-source duplicates (same name, different source)
-    id_remap2 = _merge_cross_source(nodes)
+    id_remap2, cross_log = _merge_cross_source(nodes)
+    log.cross_source_merged = cross_log
     if id_remap2:
         edges = _rewrite_edges(edges, id_remap2, nodes)
 
-    return nodes, edges
+    return nodes, edges, log
 
 
-def _enrich_countries(nodes: dict):
+def _enrich_countries(nodes: dict) -> int:
     """Extract country codes from address labels and entity names."""
+    count = 0
     for n in nodes.values():
         props = n.properties if hasattr(n, "properties") else n
         existing = props.get("country_codes", [])
@@ -116,6 +144,8 @@ def _enrich_countries(nodes: dict):
                 n.properties["country_codes"] = list(set(existing + [extracted]))
             else:
                 n["country_codes"] = list(set(existing + [extracted]))
+            count += 1
+    return count
 
 
 def _extract_country(text: str) -> str | None:
@@ -141,8 +171,9 @@ def _extract_country(text: str) -> str | None:
     return None
 
 
-def _classify_nodes(nodes: dict):
-    """Tag nodes with relevance classification."""
+def _classify_nodes(nodes: dict) -> int:
+    """Tag nodes with relevance classification. Returns address count."""
+    count = 0
     for n in nodes.values():
         label = n.label if hasattr(n, "label") else n.get("label", "")
         ntype = (n.node_type if hasattr(n, "node_type") else n.get("node_type", n.get("type", ""))).lower()
@@ -152,6 +183,9 @@ def _classify_nodes(nodes: dict):
             n.properties["_is_address"] = is_addr
         else:
             n["_is_address"] = is_addr
+        if is_addr:
+            count += 1
+    return count
 
 
 def _looks_like_address(label: str) -> bool:
@@ -209,12 +243,13 @@ def _normalize_address(addr: str) -> str:
     return a.strip()
 
 
-def _deduplicate(nodes: dict) -> dict[str, str]:
+def _deduplicate(nodes: dict) -> tuple[dict[str, str], list[dict]]:
     """Merge duplicate nodes (same normalized name + type + source).
 
-    Returns id_remap: old_id -> canonical_id
+    Returns (id_remap, merge_log)
     """
     id_remap = {}
+    merge_log = []
     # Group by (normalized_name, type, source)
     groups = defaultdict(list)
     for nid, n in nodes.items():
@@ -232,18 +267,27 @@ def _deduplicate(nodes: dict) -> dict[str, str]:
             continue
         # Keep the first, remap the rest
         canonical = nids[0]
+        canon_label = nodes[canonical].label if hasattr(nodes[canonical], "label") else nodes[canonical].get("label", "")
+        merged_labels = []
         for other in nids[1:]:
+            other_label = nodes[other].label if hasattr(nodes[other], "label") else nodes[other].get("label", "")
+            merged_labels.append(other_label)
             id_remap[other] = canonical
-            # Merge properties
             _merge_node_props(nodes[canonical], nodes[other])
             del nodes[other]
+        merge_log.append({
+            "kept": canon_label,
+            "merged": merged_labels,
+            "reason": "same normalized name, type, and source",
+        })
 
-    return id_remap
+    return id_remap, merge_log
 
 
-def _merge_cross_source(nodes: dict) -> dict[str, str]:
+def _merge_cross_source(nodes: dict) -> tuple[dict[str, str], list[dict]]:
     """Merge nodes with the same name across different sources."""
     id_remap = {}
+    merge_log = []
     # Group by normalized name only (ignoring source)
     name_groups = defaultdict(list)
     for nid, n in nodes.items():
@@ -257,12 +301,12 @@ def _merge_cross_source(nodes: dict) -> dict[str, str]:
         if len(nids) <= 1:
             continue
         # Check they're from different sources
-        sources = set()
+        source_map = {}
         for nid in nids:
             n = nodes[nid]
             src = n.source if hasattr(n, "source") else n.get("source", "")
-            sources.add(src)
-        if len(sources) <= 1:
+            source_map[nid] = src
+        if len(set(source_map.values())) <= 1:
             continue
 
         # Merge into the one with the highest confidence
@@ -274,18 +318,28 @@ def _merge_cross_source(nodes: dict) -> dict[str, str]:
         nids_sorted = sorted(nids, key=_conf, reverse=True)
         canonical = nids_sorted[0]
         canon_node = nodes[canonical]
+        canon_label = canon_node.label if hasattr(canon_node, "label") else canon_node.get("label", "")
         # Mark as multi-source
         if hasattr(canon_node, "source"):
             canon_node.source = "both"
         else:
             canon_node["source"] = "both"
 
+        merged_from = []
         for other in nids_sorted[1:]:
+            other_label = nodes[other].label if hasattr(nodes[other], "label") else nodes[other].get("label", "")
+            merged_from.append(f"{other_label} [{source_map[other]}]")
             id_remap[other] = canonical
             _merge_node_props(canon_node, nodes[other])
             del nodes[other]
 
-    return id_remap
+        merge_log.append({
+            "kept": f"{canon_label} [{source_map[canonical]}]",
+            "merged": merged_from,
+            "reason": "same person across different sources",
+        })
+
+    return id_remap, merge_log
 
 
 def _merge_node_props(canonical, other):

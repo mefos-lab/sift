@@ -447,7 +447,7 @@ async def traverse(
     # ── Normalize ────────────────────────────────────────────
     from .normalizer import normalize_graph
     pre_count = len(nodes)
-    nodes, edges = normalize_graph(nodes, edges)
+    nodes, edges, norm_log = normalize_graph(nodes, edges)
     post_count = len(nodes)
 
     # ── Build stats ──────────────────────────────────────────
@@ -505,6 +505,7 @@ async def traverse(
             "pep": pep,
             "pruned_count": len(pruned),
             "deduplicated": pre_count - post_count,
+            "normalization": norm_log.to_dict(),
             "patterns_matched": pattern_results.stats["patterns_matched"],
         },
         pattern_matches=[
