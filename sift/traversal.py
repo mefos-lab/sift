@@ -585,4 +585,5 @@ def result_to_visualizer_data(
         "opensanctions_results": os_results,
         "icij_network": icij_network,
         "traversal_stats": result.stats,
+        "pattern_matches": result.pattern_matches,
     }

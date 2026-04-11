@@ -643,6 +643,15 @@ addCard('Leak Investigations', investigations.length || 'N/A',
     ? investigations.map(i => i.replace(/-/g, ' ')).join(', ')
     : 'No investigation source data available');
 
+const pmHighRisk = patternMatches.filter(p => p.risk === 'CRITICAL' || p.risk === 'HIGH').length;
+if (patternMatches.length > 0) {
+  addCard('Patterns Detected', patternMatches.length,
+    pmHighRisk > 0
+      ? `${pmHighRisk} high/critical risk pattern${pmHighRisk > 1 ? 's' : ''} detected by YAML engine (FATF, Moody's, ICIJ methodologies)`
+      : `${patternMatches.length} pattern${patternMatches.length > 1 ? 's' : ''} detected — see sidebar for details`,
+    pmHighRisk > 0 ? 'critical' : 'warning');
+}
+
 // Narrative
 const narrative = document.getElementById('narrative');
 let narText = `<strong>${data.metadata.query}</strong> was searched across ${allSources.length} data sources: ICIJ Offshore Leaks, OpenSanctions${gleifCount ? ', GLEIF corporate registry' : ''}${secCount ? ', SEC EDGAR filings' : ''}${ukCount ? ', UK Companies House' : ''}${courtCount ? ', US court records' : ''}. `;
@@ -665,7 +674,19 @@ if (investigations.length > 1) {
 
 const jKeys = Object.keys(allCountries);
 if (jKeys.length > 2) {
-  narText += `The ${jKeys.length}-jurisdiction footprint (${jKeys.slice(0, 5).join(', ')}${jKeys.length > 5 ? '...' : ''}) suggests a multi-jurisdictional structure that may be designed for regulatory arbitrage or opacity.`;
+  narText += `The ${jKeys.length}-jurisdiction footprint (${jKeys.slice(0, 5).join(', ')}${jKeys.length > 5 ? '...' : ''}) suggests a multi-jurisdictional structure that may be designed for regulatory arbitrage or opacity. `;
+}
+
+if (patternMatches.length > 0) {
+  const critHigh = patternMatches.filter(p => p.risk === 'CRITICAL' || p.risk === 'HIGH');
+  if (critHigh.length > 0) {
+    narText += `<strong style="color:var(--sanction-color)">${critHigh.length} high-risk pattern${critHigh.length > 1 ? 's' : ''}</strong> detected: ${critHigh.map(p => p.title).join(', ')}. `;
+  }
+  const highConf = patternMatches.filter(p => p.confidence === 'high');
+  if (highConf.length > 0) {
+    narText += `<strong>${highConf.length} pattern${highConf.length > 1 ? 's' : ''} with high confidence</strong>: ${highConf.map(p => p.title).join(', ')}. `;
+  }
+  narText += `Patterns evaluated against FATF typologies, Moody's shell company indicators, and academic AML network analysis.`;
 }
 
 narrative.innerHTML = narText;
@@ -943,34 +964,38 @@ risks.forEach(r => {
 });
 if (!risks.length) riskDiv.innerHTML='<div style="font-size:12px;color:var(--text-muted)">No risk indicators detected</div>';
 
-// Pattern detection
+// Pattern detection — from YAML pattern matcher engine
 const patternDiv = document.getElementById('patternCards');
-const patterns = [];
+const patternMatches = data.pattern_matches || [];
 
-// Starburst: single name connected to many entities
-const nameGroups = {};
-nodes.forEach(n => { if(n.source!=='opensanctions'){const k=n.label.toLowerCase();nameGroups[k]=(nameGroups[k]||0)+1;}});
-Object.entries(nameGroups).forEach(([name,count]) => {
-  if (count >= 3) patterns.push({name:'Starburst',desc:`"${name}" appears as officer across ${count} entities — hub-and-spoke topology suggesting single beneficial owner with multiple offshore vehicles.`});
-});
+if (patternMatches.length) {
+  const riskColors = { CRITICAL: 'var(--sanction-color)', HIGH: '#f0883e', MEDIUM: 'var(--pep-color)', LOW: 'var(--text-muted)' };
+  const confLabels = { high: 'HIGH', medium: 'MED', low: 'LOW' };
 
-// Multi-investigation
-if (investigations.length >= 2) patterns.push({name:'Sustained Presence',desc:`Entities found across ${investigations.length} separate leak investigations (${investigations.map(i=>i.replace(/-/g,' ')).join(', ')}). This is not a one-time offshore arrangement — it was maintained across years and providers.`});
-
-// Multi-jurisdiction
-if (Object.keys(allCountries).length >= 3) patterns.push({name:'Multi-Jurisdictional',desc:`${Object.keys(allCountries).length} jurisdictions involved (${Object.keys(allCountries).slice(0,5).join(', ')}). Multi-jurisdiction structures create regulatory arbitrage opportunities and complicate enforcement.`});
-
-// PEP Opacity Layer
-if (pepCount > 0 && icijCount > 0) patterns.push({name:'PEP Opacity Layer',desc:'Offshore entities linked to politically exposed persons. PEPs using offshore structures may be shielding assets from public disclosure requirements in their home jurisdiction.'});
-
-// Cross-reference
-if (crossLinked > 0) patterns.push({name:'Cross-Source Confirmation',desc:'Same entity confirmed across independent databases (ICIJ leaks + OpenSanctions). Cross-source confirmation significantly increases confidence in the finding.'});
-
-if (patterns.length) {
-  patterns.forEach(p => {
+  patternMatches.forEach(p => {
     const card = document.createElement('div');
     card.className = 'pattern-card';
-    card.innerHTML = `<div class="pattern-name">${p.name}</div><div class="pattern-desc">${p.desc}</div>`;
+    const riskColor = riskColors[p.risk] || 'var(--text-muted)';
+    const confBadge = `<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:${riskColor};color:var(--bg);font-weight:700;margin-left:6px">${p.risk}</span>`;
+    const confText = `<span style="font-size:10px;color:var(--text-dim);margin-left:4px">${confLabels[p.confidence] || p.confidence} confidence</span>`;
+
+    let evidenceHtml = '';
+    if (p.evidence && p.evidence.length) {
+      evidenceHtml = '<div style="margin-top:6px;font-size:10px;color:var(--text-dim)">' +
+        p.evidence.slice(0, 2).map(e => `<div style="margin-top:2px">• ${e.length > 70 ? e.slice(0,68) + '...' : e}</div>`).join('') +
+        '</div>';
+    }
+
+    let condHtml = '';
+    if (p.conditions_met && p.conditions_met.length) {
+      condHtml = `<div style="margin-top:4px;font-size:10px"><span style="color:var(--accent-green)">✓ ${p.conditions_met.join(', ')}</span>`;
+      if (p.conditions_missed && p.conditions_missed.length) {
+        condHtml += ` <span style="color:var(--text-dim)">✗ ${p.conditions_missed.join(', ')}</span>`;
+      }
+      condHtml += '</div>';
+    }
+
+    card.innerHTML = `<div class="pattern-name">${p.title}${confBadge}${confText}</div>${condHtml}${evidenceHtml}`;
     patternDiv.appendChild(card);
   });
 } else {

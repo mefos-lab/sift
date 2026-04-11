@@ -51,6 +51,7 @@ def generate_visualization(
             },
             "nodes": nodes,
             "edges": edges,
+            "pattern_matches": investigation_data.get("pattern_matches", []),
         },
         ensure_ascii=False,
     )
