@@ -17,6 +17,7 @@ from .companies_house_client import CompaniesHouseClient
 from .courtlistener_client import CourtListenerClient
 from .traversal import traverse, result_to_visualizer_data
 from .export import export_json, export_markdown
+from .query_router import route_query
 
 
 def _load_env():
@@ -836,6 +837,30 @@ async def list_tools() -> list[Tool]:
         ),
 
         # =================================================================
+        # Natural language query tool
+        # =================================================================
+        Tool(
+            name="query",
+            description=(
+                "Natural language investigation query. Ask a question in plain "
+                "English and Sift will route it to the appropriate tools. "
+                "Examples: 'Who is Jeffrey Epstein?', 'Is Acme Corp sanctioned?', "
+                "'Show me the ownership chain for HSBC', 'Find court cases "
+                "involving Trump Organization', 'What SEC filings mention Epstein?'"
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "Natural language question about a person or company",
+                    },
+                },
+                "required": ["question"],
+            },
+        ),
+
+        # =================================================================
         # Export tools
         # =================================================================
         Tool(
@@ -1199,6 +1224,23 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "court_docket":
             result = await cl_client.get_docket(arguments["docket_id"])
+
+        # =============================================================
+        # Natural language query
+        # =============================================================
+        elif name == "query":
+            question = arguments["question"]
+            routed = route_query(question)
+            result = {
+                "question": question,
+                "routed_to": routed,
+                "instructions": (
+                    "The query has been parsed into tool calls. Execute each "
+                    "tool in the 'routed_to' list to answer the question. "
+                    "Each entry has 'tool' (the MCP tool name), 'args' "
+                    "(arguments to pass), and 'purpose' (what it will find)."
+                ),
+            }
 
         # =============================================================
         # Export tools

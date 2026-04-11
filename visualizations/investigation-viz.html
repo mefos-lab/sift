@@ -400,6 +400,16 @@
       </p>
       <svg id="multiTimelineSvg" height="400"></svg>
     </div>
+    <div class="timeline-section" id="narrativeTimeline">
+      <h3>Narrative Timeline</h3>
+      <p class="explanation">
+        Chronological story of key events across all sources. Read top to bottom
+        to understand the sequence of events — when entities were formed, when
+        investigations surfaced them, when legal proceedings began, and when
+        regulatory actions occurred.
+      </p>
+      <div id="narrativeContent" style="max-width:700px"></div>
+    </div>
   </div>
 </div>
 
@@ -1650,6 +1660,111 @@ if (patternMatches.length) {
       tip.style.top = (event.clientY - 14) + 'px';
     })
     .on('mouseout', () => document.getElementById('tooltip').classList.remove('visible'));
+})();
+
+// ============================================================
+// NARRATIVE TIMELINE (readable chronological story)
+// ============================================================
+(function buildNarrativeTimeline() {
+  const container = document.getElementById('narrativeContent');
+  if (!container) return;
+
+  // Collect all dated events
+  const events = [];
+  const invYears = { 'offshore-leaks': 2013, 'bahamas-leaks': 2016, 'panama-papers': 2016, 'paradise-papers': 2017, 'pandora-papers': 2021 };
+  const srcLabels = { icij: 'ICIJ', opensanctions: 'OpenSanctions', gleif: 'GLEIF', sec: 'SEC EDGAR', companies_house: 'UK Companies House', courtlistener: 'Court Records' };
+  const srcColors = { icij: 'var(--icij-color)', opensanctions: 'var(--os-color)', gleif: 'var(--gleif-color)', sec: 'var(--sec-color)', companies_house: 'var(--uk-color)', courtlistener: 'var(--court-color)' };
+
+  // ICIJ investigations
+  const seenInv = new Set();
+  nodes.forEach(n => {
+    if (n.investigation && invYears[n.investigation] && !seenInv.has(n.investigation)) {
+      seenInv.add(n.investigation);
+      const cnt = nodes.filter(x => x.investigation === n.investigation).length;
+      events.push({
+        date: new Date(invYears[n.investigation], 5, 1),
+        source: 'icij',
+        headline: `${n.investigation.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} published`,
+        detail: `${cnt} entities connected to the subject were identified in this leak investigation.`,
+      });
+    }
+  });
+
+  // Court cases
+  nodes.forEach(n => {
+    const fd = n.date_filed || n.file_date;
+    if (n.source === 'courtlistener' && fd) {
+      const d = new Date(fd);
+      if (!isNaN(d)) events.push({
+        date: d, source: 'courtlistener',
+        headline: n.label.length > 50 ? n.label.slice(0, 48) + '...' : n.label,
+        detail: `Federal court case filed.`,
+      });
+    }
+  });
+
+  // SEC filings
+  nodes.forEach(n => {
+    const fd = n.file_date;
+    if (n.source === 'sec' && fd) {
+      const d = new Date(fd);
+      if (!isNaN(d)) events.push({
+        date: d, source: 'sec',
+        headline: `SEC filing: ${n.label.length > 40 ? n.label.slice(0, 38) + '...' : n.label}`,
+        detail: `Filing mentioning the subject in SEC EDGAR.`,
+      });
+    }
+  });
+
+  // Incorporation dates
+  nodes.forEach(n => {
+    if (n.incorporation_date) {
+      const d = new Date(n.incorporation_date);
+      if (!isNaN(d)) events.push({
+        date: d, source: n.source || 'icij',
+        headline: `${n.label.length > 40 ? n.label.slice(0, 38) + '...' : n.label} incorporated`,
+        detail: `Entity formed${n.country_codes && n.country_codes.length ? ' in ' + n.country_codes.join('/') : ''}.`,
+      });
+    }
+  });
+
+  if (events.length === 0) {
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:13px">No dated events available for narrative timeline.</div>';
+    return;
+  }
+
+  events.sort((a, b) => a.date - b.date);
+
+  // Build readable narrative HTML
+  let html = '<div style="position:relative;padding-left:24px;border-left:2px solid var(--border)">';
+  let lastYear = null;
+
+  events.forEach(ev => {
+    const year = ev.date.getFullYear();
+    const dateStr = ev.date.toISOString().slice(0, 10);
+    const color = srcColors[ev.source] || 'var(--text-muted)';
+    const srcLabel = srcLabels[ev.source] || ev.source;
+
+    // Year divider
+    if (year !== lastYear) {
+      html += `<div style="margin:${lastYear ? '20' : '0'}px 0 12px -33px;font-size:18px;font-weight:700;color:var(--text)">${year}</div>`;
+      lastYear = year;
+    }
+
+    html += `
+      <div style="margin-bottom:16px;position:relative">
+        <div style="position:absolute;left:-29px;top:4px;width:10px;height:10px;border-radius:50%;background:${color}"></div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:2px">
+          ${dateStr} · <span style="color:${color}">${srcLabel}</span>
+        </div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4">${ev.headline}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;line-height:1.5">${ev.detail}</div>
+      </div>
+    `;
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
 })();
 
 // ============================================================
