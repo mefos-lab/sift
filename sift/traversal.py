@@ -141,10 +141,13 @@ async def traverse(
                 })
 
         # OpenSanctions match
-        os_res = await _api(os_client.match(
-            queries={"q0": {"schema": "Thing", "properties": {"name": [name]}}},
-            threshold=0.5,
-        ))
+        if os_client is None:
+            os_res = None
+        else:
+            os_res = await _api(os_client.match(
+                queries={"q0": {"schema": "Thing", "properties": {"name": [name]}}},
+                threshold=0.5,
+            ))
         if os_res:
             for qkey, qval in os_res.get("responses", {}).items():
                 for r in qval.get("results", [])[:10]:
@@ -259,7 +262,7 @@ async def traverse(
                 break
 
             # ── Expand OpenSanctions nodes via get_adjacent ──
-            if fnode.source in ("opensanctions", "both") and fnode.id.startswith("os-"):
+            if os_client and fnode.source in ("opensanctions", "both") and fnode.id.startswith("os-"):
                 entity_id = fnode.id[3:]
                 adj = await _api(os_client.get_adjacent(
                     entity_id, limit=max_fanout + 1,
@@ -346,7 +349,7 @@ async def traverse(
                             _add_edge(fnode.id, rid, rel, hop)
 
                 # Cross-source bridge: check OpenSanctions
-                if fnorm:
+                if os_client and fnorm:
                     os_bridge = await _api(os_client.match(
                         queries={"q0": {"schema": "Thing", "properties": {"name": [fname]}}},
                         threshold=0.7,
@@ -409,7 +412,7 @@ async def traverse(
                                 _add_edge(fnode.id, psc_id,
                                           "person_with_significant_control", hop)
                                 # Cross-bridge PSC to OpenSanctions
-                                if api_calls < budget:
+                                if os_client and api_calls < budget:
                                     pnorm = _normalize(psc_name)
                                     if pnorm and pnorm not in visited_names:
                                         visited_names.add(pnorm)

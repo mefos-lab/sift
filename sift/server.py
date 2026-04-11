@@ -33,14 +33,23 @@ def _load_env():
 _load_env()
 
 server = Server("sift")
+
+# Core sources (no auth required)
 icij_client = ICIJClient()
-os_client = OpenSanctionsClient(api_key=os.environ.get("OPENSANCTIONS_API_KEY"))
 gleif_client = GLEIFClient()
 sec_client = SECEdgarClient(
     user_agent=os.environ.get("SEC_EDGAR_USER_AGENT", "sift contact@example.com"),
 )
-ch_client = CompaniesHouseClient(api_key=os.environ.get("COMPANIES_HOUSE_API_KEY"))
-cl_client = CourtListenerClient(api_token=os.environ.get("COURTLISTENER_API_TOKEN"))
+
+# Sources requiring API keys — set to None if key is missing/empty
+_os_key = os.environ.get("OPENSANCTIONS_API_KEY", "").strip()
+os_client = OpenSanctionsClient(api_key=_os_key) if _os_key else None
+
+_ch_key = os.environ.get("COMPANIES_HOUSE_API_KEY", "").strip()
+ch_client = CompaniesHouseClient(api_key=_ch_key) if _ch_key else None
+
+_cl_token = os.environ.get("COURTLISTENER_API_TOKEN", "").strip()
+cl_client = CourtListenerClient(api_token=_cl_token) if _cl_token else None
 
 OPENSANCTIONS_TOPICS = [
     "sanction", "debarment", "crime", "crime.fin", "crime.terror",
@@ -879,7 +888,32 @@ async def list_tools() -> list[Tool]:
 
 
 @server.call_tool()
+def _not_configured(source: str, env_var: str) -> list[TextContent]:
+    """Return a helpful message when an API key is missing."""
+    return [TextContent(
+        type="text",
+        text=json.dumps({
+            "error": f"{source} is not configured — API key missing",
+            "fix": f"Set {env_var} in your .env file",
+        }, indent=2),
+    )]
+
+
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    # Guard: check required clients are configured
+    _os_tools = {"sanctions_search", "sanctions_match", "sanctions_entity",
+                 "sanctions_adjacent", "sanctions_provenance", "sanctions_catalog",
+                 "sanctions_batch_match", "sanctions_algorithms", "sanctions_monitor"}
+    _ch_tools = {"uk_search", "uk_company", "uk_officer_appointments"}
+    _cl_tools = {"court_search", "court_docket"}
+
+    if name in _os_tools and os_client is None:
+        return _not_configured("OpenSanctions", "OPENSANCTIONS_API_KEY")
+    if name in _ch_tools and ch_client is None:
+        return _not_configured("UK Companies House", "COMPANIES_HOUSE_API_KEY")
+    if name in _cl_tools and cl_client is None:
+        return _not_configured("CourtListener", "COURTLISTENER_API_TOKEN")
+
     try:
         # =================================================================
         # ICIJ tools
@@ -1193,27 +1227,28 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     pass
 
                 # Cross-reference against OpenSanctions
-                try:
-                    os_res = await os_client.match(
-                        queries={"q0": {"schema": "LegalEntity",
-                                        "properties": {"name": [entity_name]}}},
-                        threshold=0.7,
-                    )
-                    os_matches = []
-                    for qv in os_res.get("responses", {}).values():
-                        for r in qv.get("results", [])[:3]:
-                            if r.get("score", 0) >= 0.7:
-                                os_matches.append({
-                                    "caption": r.get("caption", ""),
-                                    "score": r.get("score"),
-                                    "topics": r.get("properties", {}).get(
-                                        "topics", r.get("topics", [])),
-                                    "datasets": r.get("datasets", []),
-                                })
-                    if os_matches:
-                        entry["sanctions_matches"] = os_matches
-                except Exception:
-                    pass
+                if os_client:
+                    try:
+                        os_res = await os_client.match(
+                            queries={"q0": {"schema": "LegalEntity",
+                                            "properties": {"name": [entity_name]}}},
+                            threshold=0.7,
+                        )
+                        os_matches = []
+                        for qv in os_res.get("responses", {}).values():
+                            for r in qv.get("results", [])[:3]:
+                                if r.get("score", 0) >= 0.7:
+                                    os_matches.append({
+                                        "caption": r.get("caption", ""),
+                                        "score": r.get("score"),
+                                        "topics": r.get("properties", {}).get(
+                                            "topics", r.get("topics", [])),
+                                        "datasets": r.get("datasets", []),
+                                    })
+                        if os_matches:
+                            entry["sanctions_matches"] = os_matches
+                    except Exception:
+                        pass
 
                 chain.append(entry)
 
@@ -1233,6 +1268,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             }
 
         elif name == "beneficial_owner":
+            if ch_client is None:
+                return _not_configured("UK Companies House", "COMPANIES_HOUSE_API_KEY")
             company = arguments["company"]
 
             # Step 1: Find the company
@@ -1273,16 +1310,18 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "country_of_residence": psc.get("country_of_residence", ""),
                 }
 
-                # Screen in parallel
+                # Screen in parallel (skip unavailable sources)
+                async def _noop():
+                    return None
                 checks = await asyncio.gather(
                     icij_client.reconcile(query=psc_name),
                     os_client.match(
                         queries={"q0": {"schema": "Thing",
                                         "properties": {"name": [psc_name]}}},
                         threshold=0.6,
-                    ),
+                    ) if os_client else _noop(),
                     sec_client.search(psc_name, count=3),
-                    cl_client.search(psc_name, type="r"),
+                    cl_client.search(psc_name, type="r") if cl_client else _noop(),
                     return_exceptions=True,
                 )
 
@@ -1353,18 +1392,23 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             if country:
                 os_kwargs["countries"] = [country]
 
+            async def _noop():
+                return None
             checks = await asyncio.gather(
                 icij_client.reconcile(query=query_name),
-                os_client.search(**os_kwargs),
+                os_client.search(**os_kwargs) if os_client else _noop(),
                 gleif_client.search(query_name, page_size=5),
                 sec_client.search(query_name, count=5),
-                ch_client.search_company(query_name, items_per_page=5),
-                cl_client.search(query_name, type="r"),
+                ch_client.search_company(query_name, items_per_page=5) if ch_client else _noop(),
+                cl_client.search(query_name, type="r") if cl_client else _noop(),
                 return_exceptions=True,
             )
 
             def _safe(idx):
-                return checks[idx] if not isinstance(checks[idx], Exception) else None
+                r = checks[idx]
+                if r is None or isinstance(r, Exception):
+                    return None
+                return r
 
             profile = {"name": query_name, "sources": {}}
 
