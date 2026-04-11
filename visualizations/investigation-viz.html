@@ -524,6 +524,7 @@ const allSources = [
   secCount && 'SEC', ukCount && 'UK Co. House', courtCount && 'CourtListener'
 ].filter(Boolean);
 
+const patternMatches = data.pattern_matches || [];
 const investigations = [...new Set(nodes.map(n => n.investigation).filter(Boolean))];
 const allCountries = {};
 nodes.forEach(n => {
@@ -689,7 +690,25 @@ if (patternMatches.length > 0) {
   narText += `Patterns evaluated against FATF typologies, Moody's shell company indicators, and academic AML network analysis.`;
 }
 
-narrative.innerHTML = narText;
+// Build headline finding
+let headline = '';
+if (sanctionedCount > 0) {
+  headline = `<span style="color:var(--sanction-color);font-weight:700">${sanctionedCount} sanctioned entit${sanctionedCount > 1 ? 'ies' : 'y'}</span> identified in the network`;
+} else if (crossLinked > 0) {
+  headline = `<span style="color:var(--both-color);font-weight:700">${crossLinked} cross-referenced entit${crossLinked > 1 ? 'ies' : 'y'}</span> found across multiple databases`;
+} else if (pepCount > 0) {
+  headline = `<span style="color:var(--pep-color);font-weight:700">${pepCount} politically exposed person${pepCount > 1 ? 's' : ''}</span> connected to the subject`;
+} else if (patternMatches.length > 0) {
+  headline = `<span style="font-weight:700">${patternMatches.length} structural pattern${patternMatches.length > 1 ? 's' : ''}</span> detected in the network`;
+} else {
+  headline = `${nodes.length} entities found across ${allSources.length} databases`;
+}
+
+const summaryHtml = `
+  <div style="font-size:16px;font-weight:600;margin-bottom:10px;line-height:1.4">${headline}</div>
+  <div style="font-size:13px;color:var(--text-muted);line-height:1.7">${narText}</div>
+`;
+narrative.innerHTML = summaryHtml;
 
 // ============================================================
 // HELPERS
@@ -966,7 +985,6 @@ if (!risks.length) riskDiv.innerHTML='<div style="font-size:12px;color:var(--tex
 
 // Pattern detection — from YAML pattern matcher engine
 const patternDiv = document.getElementById('patternCards');
-const patternMatches = data.pattern_matches || [];
 
 if (patternMatches.length) {
   const riskColors = { CRITICAL: 'var(--sanction-color)', HIGH: '#f0883e', MEDIUM: 'var(--pep-color)', LOW: 'var(--text-muted)' };
