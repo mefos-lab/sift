@@ -1,0 +1,56 @@
+name: name_variant_obfuscation
+title: Name Variant Obfuscation
+description: >
+  Near-identical name variants appearing across different entities,
+  jurisdictions, or data sources. Small deliberate differences in
+  spelling (transposed/dropped/added characters, accent variations,
+  reversed name order) are a documented technique for evading
+  automated sanctions screening and obscuring beneficial ownership
+  connections across jurisdictions.
+risk_level: HIGH
+status: CONFIRMED
+sources:
+  - fatf_bo_concealment_2018
+  - fatf_evasion_typologies_2023
+  - ofac_compliance_guidance
+  - icij_panama_papers_methodology
+references:
+  - title: "FATF-Egmont — Concealment of Beneficial Ownership (2018)"
+    url: https://www.fatf-gafi.org/content/dam/fatf-gafi/reports/FATF-Egmont-Concealment-beneficial-ownership.pdf
+  - title: "FATF — Money Laundering and Terrorist Financing Typologies (2023)"
+    url: https://www.fatf-gafi.org/en/publications/Methodsandtrends/Money-laundering-terrorist-financing-typologies.html
+  - title: "OFAC — A Framework for Compliance Commitments (2019)"
+    url: https://ofac.treasury.gov/media/16331/download?inline
+  - title: "ICIJ — How We Analyzed the Panama Papers"
+    url: https://www.icij.org/investigations/panama-papers/20160405-methodology/
+
+detection:
+  conditions:
+    - id: fuzzy_name_cluster
+      description: Person names with edit distance 1-2 after normalization
+      type: name_obfuscation
+      node_types: [Officer, Person]
+      max_edit_distance: 2
+      min_name_length: 6
+
+    - id: cross_jurisdiction_variant
+      description: Name variants appearing in different jurisdictions
+      type: name_obfuscation_jurisdiction
+      node_types: [Officer, Person, Entity, Company]
+      max_edit_distance: 2
+      min_jurisdictions: 2
+
+  indicators:
+    - Single-character transposition (ISAEL / ISABEL)
+    - Dropped or added middle name or particle (dos, de, van)
+    - Accent/diacritic variation across Latin-script jurisdictions
+    - Reversed name order (SURNAME GIVEN / GIVEN SURNAME)
+    - Same name root with different suffixes across jurisdictions
+    - OFAC guidance specifically warns of name spelling variation as evasion
+
+  scoring:
+    high: all_conditions_met
+    medium: fuzzy_name_cluster
+    low: fuzzy_name_cluster
+
+  data_sources: [icij, opensanctions, companies_house, aleph, wikidata]

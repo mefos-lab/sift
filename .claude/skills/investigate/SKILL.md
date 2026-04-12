@@ -36,9 +36,11 @@ investigation (the most comprehensive single-name analysis).
 
 These steps run regardless of mode. Mode-specific steps follow.
 
-### Step 1: Deep traversal
+### Step 1: Deep traversal + independent searches (parallel)
 
-Use `deep_trace` to search both databases with cross-source bridging:
+Launch all of the following in **parallel** — they are independent:
+
+**1a. `deep_trace`** — cross-source network traversal:
 
 ```
 deep_trace(names: ["<name>"], depth: <depth>, budget: <budget>)
@@ -46,13 +48,13 @@ deep_trace(names: ["<name>"], depth: <depth>, budget: <budget>)
 
 | Mode | depth | budget |
 |------|-------|--------|
-| default / --trace | 2 | 50 |
+| default / --trace | 2 | 100 |
 | --trace --depth 3 | 3 | 100 |
-| --patterns | 2 | 50 |
-| --compliance | 1 | 30 |
+| --patterns | 2 | 100 |
+| --compliance | 1 | 50 |
 | --monitor | 0 (skip deep_trace) | — |
-| --jurisdiction | 2 | 50 |
-| 2-4 names | 2 | 60 |
+| --jurisdiction | 2 | 100 |
+| 2-4 names | 2 | 100 |
 | 5+ names | 1 | 100 |
 
 For **--monitor**, skip `deep_trace` and use `sanctions_monitor`
@@ -60,12 +62,41 @@ directly. For **multi-name** investigations, all names go into a
 single `deep_trace` call as seeds — the traversal expands outward
 from each seed and discovers where their networks overlap.
 
-### Step 2: Enrich key findings
+**1b. `sanctions_match`** — structured matching (threshold 0.5):
 
-For the highest-priority nodes from the traversal:
-- Sanctioned entities: `sanctions_entity` (nested=true)
-- PEP matches: `sanctions_entity` for full profile
-- Cross-source links (both databases): `icij_entity` + `sanctions_entity`
+```
+sanctions_match(name: "<name>", threshold: 0.5)
+```
+
+Include any known properties (nationality, DOB) for better matching.
+
+**1c. `icij_investigate`** — full ICIJ network expansion (max_results 5):
+
+```
+icij_investigate(name: "<name>", max_results: 5)
+```
+
+**1d. `sanctions_search`** — broad sanctions/PEP search:
+
+```
+sanctions_search(query: "<name>", limit: 20)
+```
+
+All four calls are independent — launch them in a single parallel
+tool call block. This dramatically reduces wall-clock time.
+
+### Step 2: Enrich key findings (parallel)
+
+Once Step 1 completes, identify the highest-priority nodes and
+launch **all enrichment calls in parallel**:
+
+- Sanctioned entities: `sanctions_entity` (for each match with score > 0.7)
+- ICIJ officer nodes: `icij_entity` (for each high-confidence officer match)
+- Wikidata PEP check: `wikidata_pep_check` (if wikidataId is known)
+- Sanctions provenance: `sanctions_provenance` (for confirmed sanctions matches)
+
+All enrichment calls for different entities are independent — batch
+them into a single parallel tool call block.
 
 ### Step 3: Pattern analysis
 
@@ -282,10 +313,9 @@ identifying properties for precise matching.
 
 Parse additional flags: `--dob`, `--nationality`, `--id`, `--jurisdiction`, `--reg`
 
-1. Use `sanctions_match` with name + all provided properties,
-   `threshold: 0.5`
-2. For matches >= 0.5: `sanctions_entity` + `sanctions_provenance`
-3. Also run shallow `deep_trace` (depth 1) for offshore context
+1. Run in **parallel**: `sanctions_match` (with all provided properties,
+   threshold 0.5) + `deep_trace` (depth 1, budget 50) + `icij_investigate`
+2. For matches >= 0.5: `sanctions_entity` + `sanctions_provenance` (parallel)
 
 ```
 ## Compliance screening: [name]
@@ -374,9 +404,9 @@ reveals where the subjects' offshore structures and sanctions exposure
 1. Split input on commas, trim whitespace.
 2. Run a single `deep_trace` with all names:
    ```
-   deep_trace(names: ["name1", "name2", ...], depth: 2, budget: 60)
+   deep_trace(names: ["name1", "name2", ...], depth: 2, budget: 100)
    ```
-   For 5+ names, increase budget to 100 and reduce depth to 1.
+   For 5+ names, reduce depth to 1 (budget stays at 100).
 
 3. From the merged graph, identify **connection points** — nodes
    reachable from multiple seeds. These are the investigative core:

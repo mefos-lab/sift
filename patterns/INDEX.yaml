@@ -138,3 +138,9 @@ patterns:
     risk: HIGH
     status: ESTABLISHED
     summary: Same entity flagged in 3+ independent databases
+
+  - file: name-variant-obfuscation.yaml
+    name: name_variant_obfuscation
+    risk: HIGH
+    status: CONFIRMED
+    summary: Near-identical name variants across entities/jurisdictions (deliberate obfuscation)
