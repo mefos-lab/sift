@@ -179,7 +179,16 @@ def _write_portable(
         output_path = OUTPUT_DIR / f"{slug}-{ts}.html"
     else:
         output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        # Guard against bare query strings used as output_path (e.g.
+        # "Isabel dos Santos") — if it has no directory component and
+        # no .html suffix, treat it as a slug and route to OUTPUT_DIR.
+        if output_path.parent == Path(".") and output_path.suffix != ".html":
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            safe_slug = _slugify(str(output_path))
+            output_path = OUTPUT_DIR / f"{safe_slug}-{ts}.html"
+        else:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
     output_path.write_text(html, encoding="utf-8")
 

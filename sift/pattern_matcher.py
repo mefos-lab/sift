@@ -343,6 +343,10 @@ def _evaluate_condition(cond: dict, graph: _GraphIndex) -> list[str] | None:
         return _eval_type_match(cond, graph)
     elif ctype == "name_match":
         return _eval_name_match(cond, graph)
+    elif ctype == "name_obfuscation":
+        return _eval_name_obfuscation(cond, graph)
+    elif ctype == "name_obfuscation_jurisdiction":
+        return _eval_name_obfuscation_jurisdiction(cond, graph)
 
     return None
 
@@ -732,3 +736,141 @@ def _eval_name_match(cond: dict, graph: _GraphIndex) -> list[str] | None:
 
 def _norm(name: str) -> str:
     return re.sub(r"[^a-z0-9 ]", "", name.lower()).strip()
+
+
+def _strip_accents(s: str) -> str:
+    import unicodedata
+    nfkd = unicodedata.normalize("NFKD", s)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
+def _edit_distance(a: str, b: str) -> int:
+    """Levenshtein edit distance."""
+    if len(a) < len(b):
+        a, b = b, a
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr = [i + 1]
+        for j, cb in enumerate(b):
+            curr.append(min(
+                prev[j + 1] + 1,
+                curr[j] + 1,
+                prev[j] + (0 if ca == cb else 1),
+            ))
+        prev = curr
+    return prev[-1]
+
+
+def _clean_person_name(name: str) -> str:
+    """Normalize a person name for fuzzy comparison: strip accents,
+    lowercase, remove titles, remove non-alpha, sort words."""
+    cleaned = _strip_accents(name).lower()
+    cleaned = re.sub(r"\b(mr|mrs|ms|miss|dr|prof|sir|dame|lord|lady)\b", "", cleaned)
+    cleaned = re.sub(r"[^a-z ]", "", cleaned).strip()
+    return " ".join(sorted(cleaned.split()))
+
+
+def _eval_name_obfuscation(cond: dict, graph: _GraphIndex) -> list[str] | None:
+    """Detect person names with small edit distances (potential obfuscation)."""
+    max_dist = cond.get("max_edit_distance", 2)
+    min_len = cond.get("min_name_length", 6)
+    target_types = cond.get("node_types", ["Officer", "Person"])
+    target_lower = {t.lower() for t in target_types}
+
+    persons = [
+        n for n in graph.nodes.values()
+        if (n.get("type") or "").lower() in target_lower
+    ]
+
+    # Build normalized names
+    cleaned = []
+    for n in persons:
+        c = _clean_person_name(n.get("label", ""))
+        if len(c) >= min_len:
+            cleaned.append((c, n))
+
+    hits = []
+    seen_pairs = set()
+    for i in range(len(cleaned)):
+        for j in range(i + 1, len(cleaned)):
+            name_a, node_a = cleaned[i]
+            name_b, node_b = cleaned[j]
+            # Skip if names are identical (already merged or same person)
+            if name_a == name_b:
+                continue
+            dist = _edit_distance(name_a, name_b)
+            if 0 < dist <= max_dist:
+                pair_key = tuple(sorted([name_a, name_b]))
+                if pair_key in seen_pairs:
+                    continue
+                seen_pairs.add(pair_key)
+                label_a = node_a.get("label", "?")[:30]
+                label_b = node_b.get("label", "?")[:30]
+                jur_a = ", ".join(node_a.get("country_codes", []) or ["?"])
+                jur_b = ", ".join(node_b.get("country_codes", []) or ["?"])
+                hits.append(
+                    f"Name variant: '{label_a}' ({jur_a}) ↔ "
+                    f"'{label_b}' ({jur_b}) — "
+                    f"edit distance {dist}"
+                )
+    return hits if hits else None
+
+
+def _eval_name_obfuscation_jurisdiction(
+    cond: dict, graph: _GraphIndex,
+) -> list[str] | None:
+    """Detect name variants appearing across different jurisdictions."""
+    max_dist = cond.get("max_edit_distance", 2)
+    min_jur = cond.get("min_jurisdictions", 2)
+    target_types = cond.get("node_types", ["Officer", "Person", "Entity", "Company"])
+    target_lower = {t.lower() for t in target_types}
+
+    entities = [
+        n for n in graph.nodes.values()
+        if (n.get("type") or "").lower() in target_lower
+           and n.get("country_codes")
+    ]
+
+    cleaned = []
+    for n in entities:
+        c = _clean_person_name(n.get("label", ""))
+        if len(c) >= 6:
+            cleaned.append((c, n))
+
+    # Group by fuzzy name clusters
+    clusters: dict[str, list] = {}
+    assigned: dict[int, str] = {}
+
+    for i, (name, node) in enumerate(cleaned):
+        matched_cluster = None
+        for rep, members in clusters.items():
+            if _edit_distance(name, rep) <= max_dist:
+                matched_cluster = rep
+                break
+        if matched_cluster:
+            clusters[matched_cluster].append((name, node))
+        else:
+            clusters[name] = [(name, node)]
+
+    hits = []
+    for rep, members in clusters.items():
+        if len(members) < 2:
+            continue
+        # Collect unique jurisdictions across variants
+        all_jur = set()
+        unique_names = set()
+        for name, node in members:
+            unique_names.add(name)
+            for c in node.get("country_codes", []):
+                all_jur.add(c)
+        if len(all_jur) >= min_jur and len(unique_names) > 1:
+            labels = [m[1].get("label", "?")[:25] for m in members[:4]]
+            hits.append(
+                f"Name variants across {len(all_jur)} jurisdictions "
+                f"({', '.join(sorted(all_jur))}): "
+                f"{' / '.join(labels)}"
+            )
+
+    return hits if hits else None
