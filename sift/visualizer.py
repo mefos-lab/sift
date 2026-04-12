@@ -55,6 +55,9 @@ def generate_visualization(
         The path to the generated HTML file.
     """
     nodes, edges = _build_graph(investigation_data)
+    # Collect optional enrichment data (financial, people, litigation, filings)
+    enrichment = _collect_enrichment(investigation_data)
+
     graph_json = json.dumps(
         {
             "metadata": {
@@ -68,6 +71,7 @@ def generate_visualization(
             "pattern_matches": investigation_data.get("pattern_matches", []),
             "next_steps": investigation_data.get("next_steps")
                 or _generate_next_steps(nodes, edges, investigation_data),
+            **({"enrichment": enrichment} if enrichment else {}),
         },
         ensure_ascii=False,
     )
@@ -188,6 +192,39 @@ def _write_portable(
 # ------------------------------------------------------------------
 # Internal helpers
 # ------------------------------------------------------------------
+
+
+# Enrichment data keys that the viewer can display
+_ENRICHMENT_KEYS = (
+    "sec_financials",
+    "uk_accounts",
+    "uk_charges",
+    "uk_filing_history",
+    "sec_filings",
+    "wikidata_family",
+    "wikidata_career",
+    "wikidata_pep",
+    "court_cases",
+    "court_details",
+    "court_complaints",
+    "temporal_overlaps",
+)
+
+
+def _collect_enrichment(data: dict) -> dict:
+    """Extract optional enrichment data for the viewer.
+
+    Returns a dict of only those enrichment keys that are present
+    and non-empty in *data*.  Returns an empty dict (falsy) when
+    no enrichment data exists.
+    """
+    enrichment: dict = {}
+    for key in _ENRICHMENT_KEYS:
+        value = data.get(key)
+        if value:  # skip None, empty list, empty dict
+            enrichment[key] = value
+    return enrichment
+
 
 def _build_graph(data: dict) -> tuple[list[dict], list[dict]]:
     # Phase 1: collect raw ICIJ nodes before dedup
@@ -431,6 +468,45 @@ def _build_graph(data: dict) -> tuple[list[dict], list[dict]]:
         if e["target"] in merge_remap:
             e["target"] = merge_remap[e["target"]]
 
+    # 6b. Within-source deduplication for non-ICIJ person/officer nodes.
+    # OpenSanctions, Wikidata, etc. can return multiple entries for the
+    # same person (different datasets, different name variants).
+    person_types = {"Person", "Officer", "person", "officer"}
+    name_to_canonical: dict[str, str] = {}
+    within_remap: dict[str, str] = {}
+
+    for nid, node in list(nodes_map.items()):
+        if nid in os_merged:
+            continue
+        if node.get("type") not in person_types:
+            continue
+        norm = _normalize_name(node.get("_base_name", node["label"]))
+        if not norm:
+            continue
+        if norm in name_to_canonical:
+            canon_id = name_to_canonical[norm]
+            canon = nodes_map[canon_id]
+            # Merge flags into canonical
+            canon["sanctioned"] = canon["sanctioned"] or node.get("sanctioned", False)
+            canon["pep"] = canon["pep"] or node.get("pep", False)
+            canon["topics"] = list(set(canon.get("topics", []) + node.get("topics", [])))
+            canon["datasets"] = list(set(canon.get("datasets", []) + node.get("datasets", [])))
+            if not canon["country_codes"] and node.get("country_codes"):
+                canon["country_codes"] = node["country_codes"]
+            if node.get("source") != canon.get("source"):
+                canon["source"] = "both"
+            within_remap[nid] = canon_id
+        else:
+            name_to_canonical[norm] = nid
+
+    for nid in within_remap:
+        nodes_map.pop(nid, None)
+    for e in edges:
+        if e["source"] in within_remap:
+            e["source"] = within_remap[e["source"]]
+        if e["target"] in within_remap:
+            e["target"] = within_remap[e["target"]]
+
     # Remove edges that reference nodes no longer in the map, or self-loops
     live_ids = set(nodes_map.keys())
     edges = [
@@ -549,7 +625,15 @@ def _readable_label(raw_id: str) -> str:
 
 
 def _normalize_name(name: str) -> str:
-    return re.sub(r"[^a-z ]", "", name.lower()).strip()
+    import unicodedata
+    # Decompose accented chars and strip diacritics
+    nfkd = unicodedata.normalize("NFKD", name)
+    ascii_name = "".join(c for c in nfkd if not unicodedata.combining(c))
+    # Lowercase, strip non-alpha, remove common titles
+    cleaned = re.sub(r"[^a-z ]", "", ascii_name.lower()).strip()
+    cleaned = re.sub(r"\b(mr|mrs|ms|miss|dr|prof|sir|dame|lord|lady)\b", "", cleaned).strip()
+    # Sort words so "DOS SANTOS ISABEL" == "ISABEL DOS SANTOS"
+    return " ".join(sorted(cleaned.split()))
 
 
 def _slugify(text: str) -> str:
@@ -600,6 +684,7 @@ def _generate_next_steps(
                 f"identified: {names}{extra}. Consult legal counsel before any financial "
                 f"transactions or business relationships involving these entities."
             ),
+            "command": f"/investigate {query} --compliance",
         })
 
     # PEP connections
@@ -612,6 +697,7 @@ def _generate_next_steps(
                 f"connected to this network. AML regulations require source-of-wealth "
                 f"verification, senior management approval, and ongoing monitoring."
             ),
+            "command": f"/investigate {query} --compliance",
         })
 
     # Deeper traversal
@@ -621,10 +707,11 @@ def _generate_next_steps(
             "title": "Deepen the network trace",
             "description": (
                 f"Current traversal reached {max_hop} hop{'s' if max_hop != 1 else ''}. "
-                f"Run with depth 3 and budget 100 to expand the perimeter — "
+                f"Run with depth 3 to expand the perimeter — "
                 f"officers and intermediaries at the network edge may have significant "
                 f"connections not yet visible."
             ),
+            "command": f"/investigate {query} --trace --depth 3",
         })
 
     # Cross-reference with associates
@@ -640,14 +727,16 @@ def _generate_next_steps(
     )
     if high_degree:
         top = high_degree[0][0]
+        top_label = top.get("label", "key officer")
         steps.append({
             "priority": "RECOMMENDED",
-            "title": f"Investigate {top.get('label', 'key officer')}",
+            "title": f"Investigate {top_label}",
             "description": (
-                f"'{top.get('label', '?')}' is the most connected person in the network. "
+                f"'{top_label}' is the most connected person in the network. "
                 f"Run a separate investigation to map their full offshore footprint and "
                 f"identify shared structures."
             ),
+            "command": f"/investigate {top_label} --trace",
         })
 
     # Missing sources
@@ -675,6 +764,7 @@ def _generate_next_steps(
                 f"detected: {names}. These indicate structures commonly associated with "
                 f"money laundering or sanctions evasion. See the Reference tab for details."
             ),
+            "command": f"/investigate {query} --patterns",
         })
 
     # Monitoring
@@ -686,6 +776,7 @@ def _generate_next_steps(
             f"Sanctions lists change daily — a clean screen today does not guarantee "
             f"a clean screen tomorrow."
         ),
+        "command": f"/investigate {query} --monitor",
     })
 
     return steps

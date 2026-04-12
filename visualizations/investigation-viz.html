@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Investigation Visualization</title>
 <script>__D3_INLINE__</script>
-<script src="__D3_SRC__"></script>
-<script src="data.js?v=__BUILD_TS__"></script>
+<script src="__D3_SRC__">
+</script>
+<script src="data.js?v=__BUILD_TS__">
+</script>
 <style>
   :root {
     --bg: #0d1117;
@@ -126,6 +128,9 @@
     padding: 0 24px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 57px; /* below header */
+    z-index: 99;
   }
   .tab-btn {
     padding: 10px 20px; font-size: 13px; font-weight: 500;
@@ -292,6 +297,7 @@
   .pattern-card .pattern-name {
     font-size: 12px; font-weight: 600; color: var(--both-color); margin-bottom: 4px;
   }
+  .pattern-card .pattern-name:hover { text-decoration: underline; }
   .pattern-card .pattern-desc {
     font-size: 11px; color: var(--text-muted); line-height: 1.5;
     margin-top: 6px;
@@ -361,37 +367,139 @@
     margin-left: 6px; display: inline-block;
   }
 
+  /* Scroll offset for sticky header + tab bar */
+  [id^="ref-"], h4[id] { scroll-margin-top: 110px; }
+
   /* Tab tooltip */
   .tab-btn[title] { position: relative; }
+
+  /* Enrichment tabs — hidden by default, shown via JS when data is present */
+  .tab-btn.enrichment-tab { display: none; }
+  .tab-btn.enrichment-tab.has-data { display: inline-block; }
+
+  /* Financials panel */
+  .financials-container { padding: 24px; max-width: 1100px; }
+  .financials-section { margin-bottom: 28px; }
+  .financials-section h4 {
+    font-size: 13px; font-weight: 600; color: var(--sec-color);
+    margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .financials-table {
+    width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px;
+  }
+  .financials-table th {
+    text-align: left; padding: 6px 10px; border-bottom: 2px solid var(--border);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--text-muted); font-weight: 600;
+  }
+  .financials-table td {
+    padding: 6px 10px; border-bottom: 1px solid var(--border); color: var(--text-muted);
+  }
+  .financials-table tr:hover { background: rgba(255,255,255,0.02); }
+  .financials-table .value-cell { font-family: 'SF Mono', 'Fira Code', monospace; text-align: right; }
+  .overdue-flag { color: var(--sanction-color); font-weight: 600; font-size: 10px; }
+  .charge-status-outstanding { color: var(--pep-color); font-weight: 600; }
+  .charge-status-satisfied { color: var(--accent-green); }
+
+  /* People panel */
+  .people-container { padding: 24px; max-width: 1000px; }
+  .people-section { margin-bottom: 28px; }
+  .people-section h4 {
+    font-size: 13px; font-weight: 600; color: var(--wikidata-color);
+    margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .family-list { list-style: none; padding: 0; }
+  .family-item {
+    display: flex; align-items: center; gap: 10px; padding: 6px 10px;
+    border-bottom: 1px solid var(--border); font-size: 12px;
+  }
+  .family-item .relation-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px;
+    color: var(--text-dim); min-width: 70px; font-weight: 600;
+  }
+  .family-item .person-name { color: var(--text); font-weight: 500; }
+  .family-item .person-dates { color: var(--text-dim); font-size: 11px; margin-left: 6px; }
+  .family-item .status-badge {
+    font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-left: 4px;
+  }
+  .family-item .status-badge.pep-badge { background: rgba(210,153,34,0.2); color: var(--pep-color); }
+  .family-item .status-badge.sanctioned-badge { background: rgba(248,81,73,0.2); color: var(--sanction-color); }
+  .career-timeline { position: relative; padding-left: 24px; border-left: 2px solid var(--border); }
+  .career-entry { margin-bottom: 14px; position: relative; }
+  .career-entry::before {
+    content: ''; position: absolute; left: -29px; top: 4px;
+    width: 10px; height: 10px; border-radius: 50%; background: var(--wikidata-color);
+  }
+  .career-entry.political::before { background: var(--pep-color); }
+  .career-entry .career-dates {
+    font-size: 10px; color: var(--text-dim); margin-bottom: 2px;
+  }
+  .career-entry .career-title { font-size: 12px; font-weight: 500; color: var(--text); }
+  .career-entry .career-org { font-size: 11px; color: var(--text-muted); }
+
+  /* Litigation panel */
+  .litigation-container { padding: 24px; max-width: 1100px; }
+  .case-card {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 14px 18px; margin-bottom: 12px; border-left: 4px solid var(--court-color);
+  }
+  .case-card .case-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .case-card .case-meta { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+  .case-card .case-meta strong { color: var(--text); }
+  .case-parties {
+    display: flex; gap: 24px; margin-top: 8px; font-size: 12px;
+  }
+  .case-parties .party-group { flex: 1; }
+  .case-parties .party-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px;
+    color: var(--text-dim); font-weight: 600; margin-bottom: 4px;
+  }
+  .case-parties .party-name { color: var(--text-muted); line-height: 1.5; }
+  .complaint-toggle {
+    font-size: 11px; color: var(--icij-color); cursor: pointer; margin-top: 8px;
+    user-select: none; display: inline-block;
+  }
+  .complaint-toggle:hover { text-decoration: underline; }
+  .complaint-text {
+    display: none; margin-top: 8px; padding: 12px; background: var(--surface-2);
+    border-radius: 4px; font-size: 12px; color: var(--text-muted);
+    line-height: 1.7; max-height: 300px; overflow-y: auto; white-space: pre-wrap;
+  }
+  .complaint-text.open { display: block; }
+
+  /* Temporal overlap markers on timeline */
+  .temporal-overlap-line { stroke: var(--pep-color); stroke-width: 1.5; stroke-dasharray: 4,3; }
+  .temporal-overlap-label { font-size: 10px; fill: var(--pep-color); font-weight: 600; }
 </style>
 </head>
 <body>
 
 <div class="header">
   <div style="display:flex;align-items:center;gap:12px">
-    <div style="font-size:13px;font-weight:700;color:var(--icij-color);letter-spacing:1px;text-transform:uppercase;opacity:0.7">Sift</div>
+    <a href="#" id="navHome" style="font-size:13px;font-weight:700;color:var(--icij-color);letter-spacing:1px;text-transform:uppercase;opacity:0.7;text-decoration:none;cursor:pointer" title="Back to overview">Sift</a>
     <h1 id="title">Investigation</h1>
-  </div>
-  <div class="header-controls">
-    <input type="text" class="search-input" id="searchInput" placeholder="Filter nodes...">
-    <label><input type="checkbox" id="toggleIcij" checked> ICIJ</label>
-    <label><input type="checkbox" id="toggleOs" checked> Sanctions</label>
-    <label><input type="checkbox" id="toggleAddresses"> Addresses</label>
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)">
-      Depth: <input type="range" id="hopSlider" min="0" max="3" value="3" style="width:80px;accent-color:var(--icij-color)">
-      <span id="hopLabel" style="min-width:20px">all</span>
-    </label>
   </div>
 </div>
 
-<!-- Executive Summary (collapsible) -->
-<div class="exec-summary" id="execSummary">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);font-weight:600">Executive Summary</div>
-    <button id="toggleSummary" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px">Collapse</button>
-  </div>
-  <div id="summaryContent">
-    <div class="summary-grid" id="summaryGrid"></div>
+<!-- Tab navigation -->
+<div class="tab-bar" id="tabBar">
+  <button class="tab-btn active" data-tab="overview" title="Intelligence assessment, key figures, and recommended next steps.">Overview</button>
+  <button class="tab-btn" data-tab="network" title="Interactive force-directed graph showing all entities and their relationships. Drag nodes, zoom, and click for details.">Network Graph</button>
+  <button class="tab-btn" data-tab="ownership" title="Corporate ownership hierarchy from GLEIF LEI data. Shows parent-subsidiary relationships as a tree.">Ownership Tree</button>
+  <button class="tab-btn" data-tab="coverage" title="Heatmap showing which data sources contain information about each entity. Entities in 3+ sources are highest-value.">Source Coverage</button>
+  <button class="tab-btn" data-tab="corporate" title="Vertical corporate structure showing ownership, directorship, and beneficial control relationships.">Corporate Structure</button>
+  <button class="tab-btn" data-tab="flow" title="Bipartite flow diagram showing how people connect to offshore jurisdictions. Wider bands indicate more connections.">Jurisdiction Flow</button>
+  <button class="tab-btn" data-tab="timeline" title="All dated events across sources — leak investigations, SEC filings, court cases, entity formations. Swim-lane view, investigation timeline, and narrative chronology.">Timeline</button>
+  <button class="tab-btn" data-tab="matrix" title="Full cross-reference matrix of every entity found, with source, type, risk flags, and investigation data.">Source Matrix</button>
+  <button class="tab-btn" data-tab="patterns" title="Reference glossary: pattern definitions, risk levels, data source descriptions, jurisdiction context, PEP/sanctions designations, and scoring methodology.">Reference</button>
+  <button class="tab-btn enrichment-tab" data-tab="financials" title="SEC XBRL financial metrics, Companies House accounts, and charge register.">Financials</button>
+  <button class="tab-btn enrichment-tab" data-tab="people" title="Family relationships, career history, education, and political positions from Wikidata.">People</button>
+  <button class="tab-btn enrichment-tab" data-tab="litigation" title="Court cases with parties, nature of suit, jurisdiction, and complaint text.">Litigation</button>
+</div>
+
+<!-- Tab: Overview -->
+<div class="tab-content active" id="tab-overview">
+  <div style="max-width:1100px;margin:0 auto;padding:16px 24px">
     <div class="narrative-section">
       <div class="narrative-header" id="narrativeHeader">
         <h3>Intelligence Assessment</h3>
@@ -401,25 +509,28 @@
         <div class="findings-narrative" id="narrative"></div>
       </div>
     </div>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);font-weight:600;margin:20px 0 10px">Key Figures</div>
+    <div class="summary-grid" id="summaryGrid"></div>
+    <div id="overviewNextSteps" style="margin-top:20px"></div>
   </div>
 </div>
 
-<!-- Tab navigation -->
-<div class="tab-bar">
-  <button class="tab-btn active" data-tab="network" title="Interactive force-directed graph showing all entities and their relationships. Drag nodes, zoom, and click for details.">Network Graph</button>
-  <button class="tab-btn" data-tab="ownership" title="Corporate ownership hierarchy from GLEIF LEI data. Shows parent-subsidiary relationships as a tree.">Ownership Tree</button>
-  <button class="tab-btn" data-tab="coverage" title="Heatmap showing which data sources contain information about each entity. Entities in 3+ sources are highest-value.">Source Coverage</button>
-  <button class="tab-btn" data-tab="corporate" title="Vertical corporate structure showing ownership, directorship, and beneficial control relationships.">Corporate Structure</button>
-  <button class="tab-btn" data-tab="flow" title="Bipartite flow diagram showing how people connect to offshore jurisdictions. Wider bands indicate more connections.">Jurisdiction Flow</button>
-  <button class="tab-btn" data-tab="timeline" title="All dated events across sources — leak investigations, SEC filings, court cases, entity formations. Swim-lane view, investigation timeline, and narrative chronology.">Timeline</button>
-  <button class="tab-btn" data-tab="matrix" title="Full cross-reference matrix of every entity found, with source, type, risk flags, and investigation data.">Source Matrix</button>
-  <button class="tab-btn" data-tab="patterns" title="Reference glossary: pattern definitions, risk levels, data source descriptions, jurisdiction context, PEP/sanctions designations, and scoring methodology.">Reference</button>
-</div>
-
 <!-- Tab: Network -->
-<div class="tab-content active" id="tab-network">
+<div class="tab-content" id="tab-network">
   <div class="graph-container">
     <div class="graph-panel" id="graphPanel">
+      <div id="graphControls" style="display:flex;gap:10px;align-items:center;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:12px;color:var(--text-muted)">
+        <input type="text" class="search-input" id="searchInput" placeholder="Filter nodes..." style="max-width:180px">
+        <details id="sourceFilter" style="position:relative">
+          <summary style="cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:4px" title="Filter which data sources are shown in the graph">Sources <span id="sourceFilterCount" style="opacity:0.6"></span> &#9662;</summary>
+          <div id="sourceFilterPanel" style="position:absolute;left:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;z-index:200;min-width:200px;box-shadow:0 4px 12px rgba(0,0,0,0.3)"></div>
+        </details>
+        <label title="Show/hide registered addresses. Shared addresses (multiple entities at one location) indicate formation agents or shell company clusters."><input type="checkbox" id="toggleAddresses"> Addresses</label>
+        <label style="display:flex;align-items:center;gap:6px">
+          Depth: <input type="range" id="hopSlider" min="0" max="3" value="3" style="width:80px;accent-color:var(--icij-color)">
+          <span id="hopLabel" style="min-width:20px">all</span>
+        </label>
+      </div>
       <svg id="graphSvg"></svg>
       <div class="detail-panel" id="detailPanel">
         <button class="close-btn" id="closeDetail">&times;</button>
@@ -449,6 +560,7 @@
         <div class="legend-item" title="Politically Exposed Person — current or former government officials, their family, and close associates. AML regulations require enhanced due diligence."><div class="legend-swatch" style="border:2px solid var(--pep-color);background:transparent"></div>Politically exposed</div>
         <div class="legend-item" title="Rectangular nodes represent registered entities or companies — legal structures in offshore jurisdictions"><div class="legend-swatch rect" style="background:var(--icij-color)"></div>Entity / Company</div>
         <div class="legend-item" title="Diamond nodes represent intermediaries — law firms, banks, or corporate service providers that help set up offshore structures"><div class="legend-swatch diamond" style="background:var(--icij-color)"></div>Intermediary</div>
+        <div class="legend-item" title="Small square nodes represent registered addresses. Shared addresses (multiple entities at one location) are larger and labelled — they indicate formation agents or shell company clusters."><div class="legend-swatch rect" style="background:var(--icij-color);width:8px;height:8px;opacity:0.6"></div>Address</div>
       </div>
     </div>
   </div>
@@ -587,7 +699,7 @@
         <a href="#" onclick="goToRef('ref-legend');return false" style="color:var(--icij-color);text-decoration:none">Visual Legend</a>
         <a href="#" onclick="goToRef('ref-network-depth');return false" style="color:var(--icij-color);text-decoration:none">Network Depth (Hops)</a>
         <a href="#" onclick="goToRef('ref-scoring');return false" style="color:var(--icij-color);text-decoration:none">Confidence &amp; Risk Scoring</a>
-        <a href="#" onclick="goToRef('ref-next-steps');return false" style="color:var(--icij-color);text-decoration:none">Recommended Next Steps</a>
+        <a href="#" onclick="goToRef('ref-entity-index');return false" style="color:var(--icij-color);text-decoration:none">All Findings (Entity Index)</a>
       </div>
     </nav>
 
@@ -629,9 +741,11 @@
     <h4 id="ref-scoring" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">Confidence &amp; Risk Scoring</h4>
     <div id="refScoringContent"></div>
 
-    <!-- Recommended Next Steps section -->
-    <h4 id="ref-next-steps" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">Recommended Next Steps</h4>
-    <div id="refNextStepsContent"></div>
+    <!-- Entity Index section -->
+    <h4 id="ref-entity-index" style="font-size:14px;font-weight:600;color:var(--icij-color);margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)">All Findings (Entity Index)</h4>
+    <div id="refEntityIndexContent"></div>
+
+    <div id="refTopLinks"></div>
   </div>
 </div>
 
@@ -661,13 +775,43 @@
   </div>
 </div>
 
+
+<!-- Tab: Financials (enrichment — conditionally shown) -->
+<div class="tab-content" id="tab-financials">
+  <div class="financials-container">
+    <h3 style="margin-bottom:4px">Financial Data</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      Financial metrics from SEC XBRL filings and UK Companies House accounts and charge register.
+    </p>
+    <div id="financialsContent"></div>
+  </div>
+</div>
+
+<!-- Tab: People (enrichment — conditionally shown) -->
+<div class="tab-content" id="tab-people">
+  <div class="people-container">
+    <h3 style="margin-bottom:4px">People &amp; Associates</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      Family relationships, career history, education, and political positions from Wikidata.
+    </p>
+    <div id="peopleContent"></div>
+  </div>
+</div>
+
+<!-- Tab: Litigation (enrichment — conditionally shown) -->
+<div class="tab-content" id="tab-litigation">
+  <div class="litigation-container">
+    <h3 style="margin-bottom:4px">Litigation</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      Court cases, docket details, parties, and complaint text from CourtListener.
+    </p>
+    <div id="litigationContent"></div>
+  </div>
+</div>
+
 <div class="tooltip" id="tooltip"></div>
 
-<div style="padding:16px 24px;border-top:1px solid var(--border);background:var(--surface);display:flex;justify-content:space-between;align-items:center">
-  <div style="font-size:11px;color:var(--text-dim)">
-    <span style="font-weight:700;color:var(--icij-color);letter-spacing:1px;text-transform:uppercase">Sift</span>
-    <span style="margin-left:8px">Public records intelligence for investigative journalism</span>
-  </div>
+<div style="padding:12px 24px;border-top:1px solid var(--border);background:var(--surface);text-align:center">
   <div style="font-size:10px;color:var(--text-dim)">
     Sources: ICIJ Offshore Leaks, OpenSanctions, GLEIF, SEC EDGAR, UK Companies House, CourtListener, Aleph, Wikidata, Land Registry
   </div>
@@ -689,13 +833,11 @@ if (typeof d3 === 'undefined') {
 }
 
 // ============================================================
-// COLLAPSE SUMMARY
+// HOME NAV (Sift logo → switch to Overview tab)
 // ============================================================
-document.getElementById('toggleSummary').addEventListener('click', function() {
-  const content = document.getElementById('summaryContent');
-  const isHidden = content.style.display === 'none';
-  content.style.display = isHidden ? '' : 'none';
-  this.textContent = isHidden ? 'Collapse' : 'Expand';
+document.getElementById('navHome').addEventListener('click', function(e) {
+  e.preventDefault();
+  switchTab('overview');
 });
 
 // ============================================================
@@ -712,13 +854,21 @@ document.getElementById('narrativeHeader').addEventListener('click', function() 
 // ============================================================
 // TAB SWITCHING
 // ============================================================
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+  if (btn) btn.classList.add('active');
+  const tab = document.getElementById('tab-' + tabId);
+  if (tab) tab.classList.add('active');
+  // Scroll so the tab bar is at the top (just below the sticky header)
+  const header = document.querySelector('.header');
+  const tabBar = document.getElementById('tabBar');
+  const offset = tabBar.offsetTop - (header ? header.offsetHeight : 0);
+  window.scrollTo({ top: offset, behavior: 'smooth' });
+}
 document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-  });
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
 
 // ============================================================
@@ -750,6 +900,39 @@ nodes.forEach(n => {
   (n.country_codes || []).forEach(c => { allCountries[c] = (allCountries[c] || 0) + 1; });
   if (n.jurisdiction) allCountries[n.jurisdiction] = (allCountries[n.jurisdiction] || 0) + 1;
 });
+
+// ============================================================
+// SOURCE FILTER DROPDOWN
+// ============================================================
+const sourceConfig = [
+  { key: 'icij', label: 'ICIJ Offshore Leaks', color: 'var(--icij-color)', count: icijCount },
+  { key: 'opensanctions', label: 'OpenSanctions', color: 'var(--os-color)', count: osCount },
+  { key: 'both', label: 'Cross-referenced', color: 'var(--both-color)', count: crossLinked },
+  { key: 'gleif', label: 'GLEIF', color: 'var(--gleif-color)', count: gleifCount },
+  { key: 'sec', label: 'SEC EDGAR', color: 'var(--sec-color)', count: secCount },
+  { key: 'companies_house', label: 'Companies House', color: 'var(--uk-color)', count: ukCount },
+  { key: 'courtlistener', label: 'CourtListener', color: 'var(--court-color)', count: courtCount },
+  { key: 'aleph', label: 'Aleph (OCCRP)', color: 'var(--aleph-color)', count: alephCount },
+  { key: 'wikidata', label: 'Wikidata', color: 'var(--wikidata-color)', count: wikidataCount },
+  { key: 'land_registry', label: 'Land Registry', color: 'var(--land-color)', count: landCount },
+];
+const activeSources = sourceConfig.filter(s => s.count > 0);
+const sfPanel = document.getElementById('sourceFilterPanel');
+sfPanel.innerHTML = activeSources.map(s =>
+  `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;font-size:12px;color:var(--text-muted)" title="${s.label} (${s.count} nodes)">
+    <input type="checkbox" data-source="${s.key}" checked style="accent-color:${s.color}">
+    <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
+    ${s.label} <span style="opacity:0.5">(${s.count})</span>
+  </label>`
+).join('');
+
+function updateSourceCount() {
+  const total = activeSources.length;
+  const checked = sfPanel.querySelectorAll('input:checked').length;
+  document.getElementById('sourceFilterCount').textContent = `(${checked}/${total})`;
+}
+updateSourceCount();
+sfPanel.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => { updateSourceCount(); applyFilters(); }));
 
 const degreeMap = {};
 edges.forEach(e => {
@@ -832,22 +1015,22 @@ addCard('Entities Found', nodes.length,
 if (sanctionedCount > 0) {
   const sanctionedNames = nodes.filter(n => n.sanctioned).map(n => n.label).slice(0, 3);
   addCard('Sanctioned', sanctionedCount,
-    `${sanctionedCount} entit${sanctionedCount > 1 ? 'ies' : 'y'} on <a href="#" onclick="goToRef('ref-sanctioned');return false" style="color:var(--sanction-color)">international sanctions lists</a> (OFAC, EU, UK, UN): ${sanctionedNames.join(', ')}${sanctionedCount > 3 ? '...' : ''}. Active designations mean legal restrictions on financial transactions.`,
-    'critical', 'ref-sanctioned');
+    `${sanctionedCount} entit${sanctionedCount > 1 ? 'ies' : 'y'} on <a href="#" onclick="goToRef('ref-entity-index');return false" style="color:var(--sanction-color)">international sanctions lists</a> (OFAC, EU, UK, UN): ${sanctionedNames.join(', ')}${sanctionedCount > 3 ? '...' : ''}. Active designations mean legal restrictions on financial transactions.`,
+    'critical', 'ref-entity-index');
 }
 
 if (crossLinked > 0) {
   addCard('Cross-Referenced', crossLinked,
     `${crossLinked} entit${crossLinked > 1 ? 'ies appear' : 'y appears'} in BOTH offshore leak databases AND sanctions/PEP lists. These are the highest-value findings — two independent sources corroborate each other.`,
-    crossLinked > 0 ? 'warning' : 'info', 'ref-cross-linked');
+    crossLinked > 0 ? 'warning' : 'info', 'ref-entity-index');
 }
 
 if (pepCount > 0) {
   const pepNames = nodes.filter(n => n.pep).map(n => n.label).slice(0, 5);
   const pepExtra = pepCount > 5 ? ` and ${pepCount - 5} more` : '';
   addCard('PEP Connections', pepCount,
-    `${pepCount} <a href="#" onclick="goToRef('ref-pep');return false" style="color:var(--pep-color)">Politically Exposed Person${pepCount > 1 ? 's' : ''}</a>: ${pepNames.join(', ')}${pepExtra}. PEP status indicates elevated corruption risk due to position of influence — triggers <a href="#" onclick="goToRef('ref-pep');return false" style="color:var(--pep-color)">enhanced due diligence</a> under AML/KYC regulations.`,
-    'warning', 'ref-pep');
+    `${pepCount} <a href="#" onclick="goToRef('ref-entity-index');return false" style="color:var(--pep-color)">Politically Exposed Person${pepCount > 1 ? 's' : ''}</a>: ${pepNames.join(', ')}${pepExtra}. PEP status indicates elevated corruption risk due to position of influence — triggers <a href="#" onclick="goToRef('ref-entity-index');return false" style="color:var(--pep-color)">enhanced due diligence</a> under AML/KYC regulations.`,
+    'warning', 'ref-entity-index');
 }
 
 const jKeys = Object.keys(allCountries);
@@ -928,19 +1111,30 @@ if (crossLinked > 0) {
   findingsText += `<span class="flag-cross">${crossLinked} entit${crossLinked > 1 ? 'ies appear' : 'y appears'} in both databases</span> — this is a significant finding indicating documented offshore holdings connected to sanctions or PEP exposure. `;
 }
 if (sanctionedCount > 0) {
-  findingsText += `<span class="flag-sanction">${sanctionedCount} sanctioned entit${sanctionedCount > 1 ? 'ies were' : 'y was'} identified</span>, meaning active designations on international sanctions lists. `;
+  const sanctionedNames = nodes.filter(n => n.sanctioned).map(n => n.label).slice(0, 3);
+  findingsText += `<span class="flag-sanction">${sanctionedCount} sanctioned entit${sanctionedCount > 1 ? 'ies were' : 'y was'} identified</span>: ${sanctionedNames.join(', ')}${sanctionedCount > 3 ? '...' : ''}. <strong>This means financial institutions are legally prohibited from processing transactions</strong> involving these entities. Violations can result in criminal penalties and fines in the millions. Any business relationship, direct or indirect, must be reviewed by legal counsel immediately. `;
 }
 if (pepCount > 0) {
-  findingsText += `<span class="flag-pep">${pepCount} politically exposed person${pepCount > 1 ? 's' : ''}</span> ${pepCount > 1 ? 'are' : 'is'} connected to the investigation subject. Under most AML/KYC frameworks, PEP connections require enhanced due diligence. `;
+  const pepNames = nodes.filter(n => n.pep).map(n => n.label).slice(0, 3);
+  findingsText += `<span class="flag-pep">${pepCount} politically exposed person${pepCount > 1 ? 's' : ''}</span> connected to the investigation subject: ${pepNames.join(', ')}${pepCount > 3 ? '...' : ''}. <strong>PEP status is a corruption risk indicator</strong> — these individuals hold or held positions of public trust and are at higher risk of bribery, embezzlement, and misuse of public funds. Banks and regulated entities are required to apply enhanced due diligence (EDD), verify source of wealth, and obtain senior management approval before establishing business relationships. `;
 }
 if (rcaCount > 0) {
-  findingsText += `${rcaCount} close associate${rcaCount > 1 ? 's' : ''} of PEPs ${rcaCount > 1 ? 'were' : 'was'} identified — RCA status typically extends the same due diligence requirements as direct PEP status. `;
+  findingsText += `${rcaCount} close associate${rcaCount > 1 ? 's' : ''} of PEPs ${rcaCount > 1 ? 'were' : 'was'} identified — under FATF guidance, close associates face the same enhanced scrutiny as PEPs themselves, as they may be used as proxies to hide assets or conduct transactions on behalf of the PEP. `;
 }
 if (investigations.length > 1) {
-  findingsText += `The subject appears across <strong>${investigations.length} separate leak investigations</strong> (${investigations.map(i => i.replace(/-/g, ' ')).join(', ')}), indicating a sustained offshore presence maintained over multiple years. `;
+  findingsText += `The subject appears across <strong>${investigations.length} separate leak investigations</strong> (${investigations.map(i => i.replace(/-/g, ' ')).join(', ')}). This is significant — each leak covers a different offshore service provider, so appearing in multiple leaks indicates a sustained, deliberate offshore presence maintained across different networks over multiple years, not a single isolated arrangement. `;
 }
 if (jKeys.length > 2) {
-  findingsText += `The ${jKeys.length}-jurisdiction footprint (${jKeys.slice(0, 5).join(', ')}${jKeys.length > 5 ? '...' : ''}) suggests a multi-jurisdictional structure that may be designed for regulatory arbitrage or opacity. `;
+  const secrecyJur = jKeys.filter(j => ['BVI','PA','KY','BS','JE','GG','IM','SC','MU','WS','VU'].includes(j));
+  findingsText += `The ${jKeys.length}-jurisdiction footprint (${jKeys.slice(0, 5).join(', ')}${jKeys.length > 5 ? '...' : ''}) `;
+  if (secrecyJur.length > 0) {
+    findingsText += `includes <strong>${secrecyJur.length} secrecy jurisdiction${secrecyJur.length > 1 ? 's' : ''}</strong> (${secrecyJur.join(', ')}). These jurisdictions are characterized by minimal corporate disclosure requirements, making them attractive for concealing beneficial ownership. `;
+  } else {
+    findingsText += `spans multiple regulatory environments. `;
+  }
+}
+if (courtCount > 0) {
+  findingsText += `<strong>${courtCount} US court record${courtCount > 1 ? 's' : ''}</strong> ${courtCount > 1 ? 'were' : 'was'} found — the subject or related entities are involved in documented US litigation, which may provide additional investigative leads through court filings and docket entries. `;
 }
 if (!findingsText) findingsText = 'No high-priority risk indicators (sanctions, PEP, cross-references) were detected in this investigation.';
 
@@ -974,6 +1168,22 @@ if (patternMatches.length > 0) {
   patternCallout += '</div>';
 }
 
+// Bottom line — the "so what"
+let bottomLine = '';
+if (sanctionedCount > 0 && pepCount > 0) {
+  bottomLine = `This investigation reveals a network with <strong>both active sanctions exposure and politically exposed persons</strong>. The combination of sanctioned entities and PEP connections represents the highest risk tier — it indicates not only offshore activity documented in leaked records, but also confirmed designations by international regulatory authorities. Any financial institution, professional services firm, or counterparty engaging with entities in this network faces potential criminal liability.`;
+} else if (sanctionedCount > 0) {
+  bottomLine = `Active sanctions designations mean this is not merely an offshore footprint — <strong>these are entities that regulatory authorities have specifically flagged</strong>. Any direct or indirect financial relationship with sanctioned entities may violate applicable law in multiple jurisdictions.`;
+} else if (pepCount > 0 && crossLinked > 0) {
+  bottomLine = `The combination of PEP connections and cross-referenced entities across both leak databases and sanctions/PEP lists indicates a <strong>network that warrants enhanced due diligence</strong>. Cross-references are the strongest signal — they mean two independent data sources corroborate the same finding.`;
+} else if (pepCount > 0) {
+  bottomLine = `PEP connections require <strong>enhanced due diligence under AML regulations</strong>. While PEP status alone does not imply wrongdoing, the associated offshore structures suggest arrangements that should be scrutinized for source-of-wealth verification.`;
+} else if (crossLinked > 0) {
+  bottomLine = `Cross-referenced entities — appearing in both ICIJ leak databases and sanctions/PEP databases — represent <strong>corroborated findings from independent sources</strong>. These are the most reliable investigative leads.`;
+} else if (patternMatches.length > 0) {
+  bottomLine = `While no sanctions or PEP exposure was detected, ${patternMatches.length} structural pattern${patternMatches.length > 1 ? 's were' : ' was'} identified that ${patternMatches.length > 1 ? 'match' : 'matches'} known typologies for offshore opacity. These warrant further investigation to determine purpose and beneficial ownership.`;
+}
+
 const summaryHtml = `
   <div style="font-size:16px;font-weight:600;margin-bottom:14px;line-height:1.4">${headline}</div>
   <div class="narrative-subsection">
@@ -984,6 +1194,10 @@ const summaryHtml = `
     <h4>Key Findings</h4>
     <div style="font-size:13px;color:var(--text-muted);line-height:1.7">${findingsText}</div>
   </div>
+  ${bottomLine ? `<div class="narrative-subsection">
+    <h4>What This Means</h4>
+    <div style="font-size:13px;color:var(--text-muted);line-height:1.7">${bottomLine}</div>
+  </div>` : ''}
   <div class="narrative-subsection">
     <h4>Pattern Analysis</h4>
     <div style="font-size:13px;color:var(--text-muted);line-height:1.7">${patternText}</div>
@@ -1045,6 +1259,11 @@ function contextNote(d) {
   if (d.source === 'aleph') notes.push('Source: Aleph (OCCRP) — investigative data platform aggregating corporate registries, court records, and datasets from multiple countries.');
   if (d.source === 'wikidata') notes.push('Source: Wikidata — structured knowledge base from Wikimedia. Entity relationships and metadata from community-curated data.');
   if (d.source === 'land_registry') notes.push('Source: Land Registry — property ownership records showing real estate holdings and beneficial ownership information.');
+  if (isAddress(d)) {
+    const deg = degreeMap[d.id] || 0;
+    if (deg >= 10) notes.push(`This address is shared by ${deg} entities. Mass registration at a single address is a strong indicator of formation agent activity or shell company infrastructure.`);
+    else if (deg >= 3) notes.push(`This address is shared by ${deg} entities. Shared addresses can indicate common corporate service providers or related entity networks.`);
+  }
   if (d.sanctioned) notes.push('This entity is on one or more active sanctions lists. Transactions involving sanctioned entities may be prohibited under applicable law.');
   if (d.pep) notes.push('This person is classified as a Politically Exposed Person (PEP). Financial institutions are required to apply enhanced due diligence (EDD) to PEP-related transactions.');
   if ((d.topics || []).includes('role.rca')) notes.push('Close associate (RCA) of a politically exposed person. Under FATF guidance, RCA status typically triggers the same enhanced due diligence requirements as direct PEP status.');
@@ -1077,9 +1296,11 @@ const g = svg.append('g');
 svg.call(d3.zoom().scaleExtent([0.1, 8]).on('zoom', e => g.attr('transform', e.transform)));
 
 const simulation = d3.forceSimulation(nodes)
-  .force('link', d3.forceLink(edges).id(d => d.id).distance(80))
-  .force('charge', d3.forceManyBody().strength(-200))
+  .force('link', d3.forceLink(edges).id(d => d.id).distance(60))
+  .force('charge', d3.forceManyBody().strength(-150).distanceMax(400))
   .force('center', d3.forceCenter(width / 2, height / 2))
+  .force('x', d3.forceX(width / 2).strength(0.05))
+  .force('y', d3.forceY(height / 2).strength(0.05))
   .force('collide', d3.forceCollide().radius(d => getRadius(d) + 4));
 
 // Re-center simulation once the CSS grid layout computes the panel's actual width.
@@ -1126,9 +1347,15 @@ node.each(function(d) {
       .attr('stroke', border || 'none').attr('stroke-width', border ? 2.5 : 0)
       .attr('stroke-dasharray', d.sanctioned ? '4,2' : 'none');
   } else if (isAddress(d)) {
-    const s = Math.max(4, r*0.6);
+    const deg = degreeMap[d.id] || 0;
+    const shared = deg >= 3;
+    const s = shared ? Math.max(8, r * 0.85) : Math.max(5, r * 0.6);
+    const opacity = shared ? 0.8 * hopOpacity(d) : 0.5 * hopOpacity(d);
     el.append('rect').attr('width', s).attr('height', s).attr('x', -s/2).attr('y', -s/2)
-      .attr('fill', nodeColor(d)).attr('fill-opacity', 0.3 * hopOpacity(d));
+      .attr('rx', shared ? 3 : 1)
+      .attr('fill', nodeColor(d)).attr('fill-opacity', opacity)
+      .attr('stroke', shared ? nodeColor(d) : 'none')
+      .attr('stroke-width', shared ? 1.5 : 0).attr('stroke-opacity', 0.6);
   } else {
     el.append('circle').attr('r', r)
       .attr('fill', nodeColor(d)).attr('fill-opacity', hopOpacity(d))
@@ -1137,11 +1364,24 @@ node.each(function(d) {
   }
 });
 
-node.filter(d => (degreeMap[d.id] || 0) >= 1 || d.sanctioned || d.pep || d.source === 'both')
+// Labels for non-address nodes
+node.filter(d => !isAddress(d) && ((degreeMap[d.id] || 0) >= 1 || d.sanctioned || d.pep || d.source === 'both'))
   .append('text')
   .text(d => d.label.length > 24 ? d.label.slice(0, 22) + '...' : d.label)
   .attr('dy', d => getRadius(d) + 14).attr('text-anchor', 'middle')
   .attr('fill', 'var(--text-muted)').attr('font-size', '10px').attr('pointer-events', 'none');
+
+// Labels for shared addresses (3+ connections)
+node.filter(d => isAddress(d) && (degreeMap[d.id] || 0) >= 3)
+  .append('text')
+  .text(d => {
+    const deg = degreeMap[d.id] || 0;
+    const short = d.label.length > 18 ? d.label.slice(0, 16) + '\u2026' : d.label;
+    return deg >= 5 ? `${short} (${deg})` : short;
+  })
+  .attr('dy', d => getRadius(d) + 12).attr('text-anchor', 'middle')
+  .attr('fill', 'var(--text-muted)').attr('font-size', '9px')
+  .attr('font-style', 'italic').attr('pointer-events', 'none');
 
 const tooltip = document.getElementById('tooltip');
 node.on('mouseover', (event, d) => {
@@ -1149,6 +1389,7 @@ node.on('mouseover', (event, d) => {
     if (d.type) html += ` <span style="color:var(--text-dim)">(${d.type})</span>`;
     if (d.country_codes && d.country_codes.length) html += `<br>Countries: ${d.country_codes.join(', ')}`;
     if (d.investigation) html += `<br>Source: ${d.investigation.replace(/-/g,' ')}`;
+    if (isAddress(d)) { const deg = degreeMap[d.id] || 0; if (deg >= 3) html += `<br><span style="color:var(--pep-color)">Shared by ${deg} entities</span>`; }
     if (d.sanctioned) html += `<br><span style="color:var(--sanction-color);font-weight:600">Sanctioned</span>`;
     if (d.pep) html += `<br><span style="color:var(--pep-color);font-weight:600">Politically Exposed Person</span>`;
     if ((d.topics||[]).includes('role.rca')) html += `<br><span style="color:var(--rca-color)">Close associate of PEP</span>`;
@@ -1201,6 +1442,53 @@ function showDetail(d) {
   if (d.incorporation_date) rows += `<div class="detail-row"><span class="label">Incorporated</span><span>${d.incorporation_date}</span></div>`;
   if (d.topics&&d.topics.length) rows += `<div class="detail-row"><span class="label">Topics</span><span>${d.topics.join(', ')}</span></div>`;
 
+  // Trace connection path from seed to this node via BFS
+  let pathHtml = '';
+  if (d.hop > 0) {
+    const seedIds = new Set(nodes.filter(n => (n.hop || 0) === 0).map(n => n.id));
+    // BFS from d back toward a seed
+    const prev = {};
+    const prevEdge = {};
+    const queue = [d.id];
+    const seen = new Set([d.id]);
+    let found = null;
+    while (queue.length && !found) {
+      const cur = queue.shift();
+      for (const e of edges) {
+        const s = e.source.id || e.source, t = e.target.id || e.target;
+        let neighbor = null;
+        if (s === cur && !seen.has(t)) neighbor = t;
+        if (t === cur && !seen.has(s)) neighbor = s;
+        if (neighbor) {
+          seen.add(neighbor);
+          prev[neighbor] = cur;
+          prevEdge[neighbor] = e.relationship || 'linked';
+          if (seedIds.has(neighbor)) { found = neighbor; break; }
+          queue.push(neighbor);
+        }
+      }
+    }
+    if (found) {
+      const chain = [];
+      let cur = found;
+      while (cur !== d.id) {
+        const n = nodes.find(x => x.id === cur);
+        const rel = prevEdge[cur] || '';
+        const next = prev[cur];
+        chain.push({ label: n ? n.label : cur, rel: rel.replace(/_/g, ' ') });
+        cur = next;
+      }
+      chain.push({ label: d.label, rel: '' });
+      pathHtml = '<div style="margin:10px 0;padding:10px 14px;background:var(--bg);border-radius:6px;border-left:3px solid var(--icij-color)">' +
+        '<div style="font-size:10px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;font-weight:600">Connection path</div>' +
+        chain.map((c, i) => {
+          const arrow = i < chain.length - 1 ? ` <span style="color:var(--text-dim)">→</span> <span style="color:var(--text-dim);font-size:10px;font-style:italic">${chain[i+1].rel}</span> <span style="color:var(--text-dim)">→</span> ` : '';
+          return `<span style="font-weight:${i === 0 || i === chain.length - 1 ? '600' : '400'};color:var(--text)">${c.label}</span>${arrow}`;
+        }).join('') +
+        '</div>';
+    }
+  }
+
   const notes = contextNote(d);
   const notesHtml = notes.map(n =>
     `<div class="context-note${d.sanctioned ? ' warning' : ''}">${n}</div>`
@@ -1219,6 +1507,7 @@ function showDetail(d) {
     <div class="meta">${d.id}</div>
     <div class="tags">${tags}</div>
     ${rows}
+    ${pathHtml}
     ${notesHtml}
     ${connected ? `<h3 style="font-size:12px;margin:14px 0 6px;color:var(--text-muted)">CONNECTIONS</h3>${connected}` : ''}
   `;
@@ -1338,21 +1627,10 @@ if (patternMatches.length) {
 // ============================================================
 function goToRef(anchorId) {
   // Switch to Reference tab and scroll to the given anchor
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  const btn = document.querySelector('.tab-btn[data-tab="patterns"]');
-  if (btn) btn.classList.add('active');
-  const tab = document.getElementById('tab-patterns');
-  if (tab) tab.classList.add('active');
+  switchTab('patterns');
   setTimeout(() => {
     const el = document.getElementById(anchorId);
-    if (el) {
-      const headerH = document.querySelector('.header') ? document.querySelector('.header').offsetHeight : 0;
-      const tabBarH = document.querySelector('.tab-bar') ? document.querySelector('.tab-bar').offsetHeight : 0;
-      const offset = headerH + tabBarH + 16;
-      const y = el.getBoundingClientRect().top + window.scrollY - offset;
-      window.scrollTo({ top: y, behavior: 'smooth' });
-    }
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 100);
 }
 function goToPattern(patternName) {
@@ -1709,27 +1987,147 @@ function goToPattern(patternName) {
 })();
 
 // ============================================================
-// REFERENCE: Recommended Next Steps (from investigation skill)
+// REFERENCE: Entity Index (All Findings)
 // ============================================================
-(function buildRefNextSteps() {
-  const el = document.getElementById('refNextStepsContent');
+(function buildEntityIndex() {
+  const el = document.getElementById('refEntityIndexContent');
+  if (!el) return;
+
+  const srcLabelsIdx = { icij: 'ICIJ', opensanctions: 'OpenSanctions', both: 'ICIJ + OpenSanctions', gleif: 'GLEIF', sec: 'SEC EDGAR', companies_house: 'UK Co. House', courtlistener: 'CourtListener', aleph: 'Aleph', wikidata: 'Wikidata', land_registry: 'Land Registry' };
+
+  // Display-time dedup: merge person nodes with the same normalized name
+  function normName(s) {
+    return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/\b(mr|mrs|ms|miss|dr|prof|sir|dame)\b/g, '')
+      .replace(/[^a-z ]/g, '').trim().split(/\s+/).sort().join(' ');
+  }
+  const personTypes = new Set(['Officer','Person','officer','person']);
+  const dedupMap = {};
+  const dedupedNodes = [];
+  const mergedIds = new Set();
+  nodes.forEach(n => {
+    if (!personTypes.has(n.type)) { dedupedNodes.push(n); return; }
+    const norm = normName(n.label);
+    if (!norm) { dedupedNodes.push(n); return; }
+    if (dedupMap[norm]) {
+      const canon = dedupMap[norm];
+      canon.sanctioned = canon.sanctioned || n.sanctioned;
+      canon.pep = canon.pep || n.pep;
+      canon.topics = [...new Set([...(canon.topics||[]), ...(n.topics||[])])];
+      if (!canon.country_codes?.length && n.country_codes?.length) canon.country_codes = n.country_codes;
+      if (n.source !== canon.source) canon._indexSource = 'Multiple';
+      if (n.risk_score > (canon.risk_score || 0)) { canon.risk_score = n.risk_score; canon.risk_level = n.risk_level; }
+      mergedIds.add(n.id);
+    } else {
+      const copy = Object.assign({}, n);
+      dedupMap[norm] = copy;
+      dedupedNodes.push(copy);
+    }
+  });
+
+  // Categorize entities by flag (using deduped list)
+  const sanctioned = dedupedNodes.filter(n => n.sanctioned);
+  const peps = dedupedNodes.filter(n => n.pep);
+  const rcas = dedupedNodes.filter(n => (n.topics || []).includes('role.rca'));
+  const crossRef = dedupedNodes.filter(n => n.source === 'both' || n._indexSource === 'Multiple');
+  const rest = dedupedNodes.filter(n => !n.sanctioned && !n.pep && !(n.topics || []).includes('role.rca') && n.source !== 'both' && !n._indexSource);
+
+  function entityRow(n) {
+    const flags = [];
+    if (n.sanctioned) flags.push('<span style="color:var(--sanction-color);font-weight:600;font-size:10px">SANCTIONED</span>');
+    if (n.pep) flags.push('<span style="color:var(--pep-color);font-weight:600;font-size:10px">PEP</span>');
+    if ((n.topics || []).includes('role.rca')) flags.push('<span style="color:var(--rca-color);font-size:10px">RCA</span>');
+    if (n.source === 'both') flags.push('<span style="color:var(--both-color);font-size:10px">CROSS-REF</span>');
+    const jur = (n.country_codes || []).join(', ');
+    const src = srcLabelsIdx[n.source] || n.source || '';
+    const risk = n.risk_score > 0 ? `<span style="font-size:10px;color:${n.risk_level === 'CRITICAL' ? 'var(--sanction-color)' : n.risk_level === 'HIGH' ? '#f0883e' : n.risk_level === 'MEDIUM' ? 'var(--pep-color)' : 'var(--text-dim)'}">${n.risk_level}</span>` : '';
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px;font-size:12px;font-weight:500;color:var(--text);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${n.label}">${n.label}</td>
+      <td style="padding:6px 8px;font-size:11px;color:var(--text-dim)">${n.type || ''}</td>
+      <td style="padding:6px 8px;font-size:11px;color:var(--text-dim)">${src}</td>
+      <td style="padding:6px 8px;font-size:11px;color:var(--text-dim)">${jur}</td>
+      <td style="padding:6px 8px;font-size:11px">${flags.join(' ')}</td>
+      <td style="padding:6px 8px;font-size:11px;text-align:center">${n.hop != null ? n.hop : ''}</td>
+      <td style="padding:6px 8px;font-size:11px;text-align:center">${risk}</td>
+    </tr>`;
+  }
+
+  function entitySection(title, color, items, description) {
+    if (!items.length) return '';
+    return `<div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:12px;font-weight:600;color:${color}">${title}</span>
+        <span style="font-size:11px;color:var(--text-dim)">(${items.length})</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.5">${description}</div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          <th style="padding:6px 8px;text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-dim);font-weight:600">Name</th>
+          <th style="padding:6px 8px;text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-dim);font-weight:600">Type</th>
+          <th style="padding:6px 8px;text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-dim);font-weight:600">Source</th>
+          <th style="padding:6px 8px;text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-dim);font-weight:600">Jurisdiction</th>
+          <th style="padding:6px 8px;text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-dim);font-weight:600">Flags</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;text-transform:uppercase;color:var(--text-dim);font-weight:600">Hop</th>
+          <th style="padding:6px 8px;text-align:center;font-size:10px;text-transform:uppercase;color:var(--text-dim);font-weight:600">Risk</th>
+        </tr></thead>
+        <tbody>${items.map(entityRow).join('')}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  let html = `<p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
+    Complete list of all ${dedupedNodes.length} entities discovered in this investigation (${nodes.length - dedupedNodes.length} duplicates merged), grouped by risk category.
+    These are the entities behind the counts in the Intelligence Assessment.
+  </p>`;
+
+  html += entitySection('Sanctioned Entities', 'var(--sanction-color)', sanctioned,
+    'Entities on active international sanctions lists (OFAC, EU, UK, UN). Financial transactions involving these entities may be legally prohibited.');
+  html += entitySection('Politically Exposed Persons', 'var(--pep-color)', peps,
+    'Current or former government officials, their family members, and close associates. PEP status triggers enhanced due diligence requirements under AML/KYC regulations.');
+  html += entitySection('Close Associates (RCA)', 'var(--rca-color)', rcas.filter(n => !n.pep && !n.sanctioned),
+    'Persons identified as close associates of PEPs who are not themselves classified as PEPs. RCA status typically extends the same enhanced scrutiny.');
+  html += entitySection('Cross-Referenced Entities', 'var(--both-color)', crossRef.filter(n => !n.sanctioned && !n.pep),
+    'Entities found in both ICIJ Offshore Leaks and OpenSanctions databases. Independent sources corroborating the same finding — these are the highest-value investigative leads.');
+  html += entitySection('Other Entities', 'var(--text-muted)', rest.filter(n => !isAddress(n)).slice(0, 100),
+    `All other entities in the investigation network (showing up to 100 of ${rest.filter(n => !isAddress(n)).length}). Includes companies, officers, intermediaries, and other connected nodes.`);
+
+  el.innerHTML = html;
+})();
+
+// ============================================================
+// REFERENCE: ↑ Top links after each sub-section
+// ============================================================
+(function addRefTopLinks() {
+  const ids = ['refRiskContent','refDesignationsContent','refSourcesContent','refJurisdictionsContent','refLegendContent','refNetworkDepthContent','refScoringContent','patternTabContent','refEntityIndexContent'];
+  const topLink = '<div style="text-align:right;margin:8px 0 4px"><a href="#" onclick="document.getElementById(\'tab-patterns\').scrollIntoView({behavior:\'smooth\',block:\'start\'});return false" style="font-size:11px;color:var(--text-dim);text-decoration:none">↑ Top</a></div>';
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.innerHTML.trim()) el.insertAdjacentHTML('afterend', topLink);
+  });
+})();
+
+// ============================================================
+// RECOMMENDED NEXT STEPS (in Overview tab)
+// ============================================================
+(function buildNextSteps() {
+  const el = document.getElementById('overviewNextSteps');
   if (!el) return;
   const steps = data.next_steps || [];
   const priorityColors = { CRITICAL: 'var(--sanction-color)', HIGH: '#f0883e', RECOMMENDED: 'var(--icij-color)', ONGOING: 'var(--text-muted)' };
 
-  if (!steps.length) {
-    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:12px">No next steps provided. The investigation skill generates tailored recommendations when run via <code>/investigate</code>.</div>';
-    return;
-  }
+  if (!steps.length) return;
 
-  el.innerHTML = steps.map(s => {
+  el.innerHTML = '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);font-weight:600;margin-bottom:10px">Recommended Next Steps</div>' +
+    steps.map(s => {
     const color = priorityColors[s.priority] || priorityColors[s.level] || 'var(--icij-color)';
     const label = s.priority || s.level || '';
+    const cmd = s.command ? `<div style="margin-top:4px"><code style="font-size:11px;padding:2px 6px;background:var(--card-bg);border:1px solid var(--border);border-radius:3px;color:var(--icij-color);user-select:all">${s.command}</code></div>` : '';
     return `<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px;padding:10px 14px;background:var(--bg);border-radius:6px;border-left:4px solid ${color}">
       ${label ? `<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:${color};color:var(--bg);font-weight:700;flex-shrink:0;margin-top:2px">${label}</span>` : ''}
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text)">${s.title || ''}</div>
         <div style="font-size:12px;color:var(--text-muted);line-height:1.6">${s.description || s.desc || ''}</div>
+        ${cmd}
       </div>
     </div>`;
   }).join('');
@@ -1830,6 +2228,9 @@ function goToPattern(patternName) {
     });
   });
 
+  const flowTip = document.getElementById('tooltip');
+  const flowSrcLabels = { icij: 'ICIJ Offshore Leaks', opensanctions: 'OpenSanctions', both: 'Multiple Sources', gleif: 'GLEIF', sec: 'SEC EDGAR', companies_house: 'UK Companies House', courtlistener: 'CourtListener', aleph: 'Aleph', wikidata: 'Wikidata', land_registry: 'Land Registry' };
+
   // Left nodes + labels (persons)
   leftNames.forEach(name => {
     const info = personToJurisdictions[name];
@@ -1837,26 +2238,79 @@ function goToPattern(patternName) {
     const col = info.node.source === 'both' ? 'var(--both-color)' :
                 info.node.source === 'opensanctions' ? 'var(--os-color)' : 'var(--icij-color)';
     const border = highlightBorder(info.node);
-    gf.append('circle').attr('cx',0).attr('cy',yPos).attr('r',7)
+    const personG = gf.append('g').attr('cursor', 'pointer');
+    personG.append('circle').attr('cx',0).attr('cy',yPos).attr('r',7)
       .attr('fill',col).attr('stroke',border||'none').attr('stroke-width',border?2:0);
-    gf.append('text').attr('x',-14).attr('y',yPos).attr('dy','0.35em')
+    personG.append('text').attr('x',-14).attr('y',yPos).attr('dy','0.35em')
       .attr('text-anchor','end').attr('fill',col).attr('font-size','12px')
       .attr('font-weight','600').text(name.length > 24 ? name.slice(0,22)+'...' : name);
+    personG.on('mouseover', (event) => {
+      const n = info.node;
+      let html = `<strong>${n.label}</strong>`;
+      if (n.type) html += ` <span style="color:var(--text-dim)">(${n.type})</span>`;
+      html += `<br><span style="color:var(--text-dim)">Source:</span> ${flowSrcLabels[n.source] || n.source}`;
+      if (n.sanctioned) html += `<br><span style="color:var(--sanction-color);font-weight:600">Sanctioned</span>`;
+      if (n.pep) html += `<br><span style="color:var(--pep-color);font-weight:600">Politically Exposed Person</span>`;
+      html += `<br><span style="color:var(--text-dim)">Jurisdictions:</span> ${info.jurisdictions.join(', ')}`;
+      flowTip.innerHTML = html;
+      flowTip.classList.add('visible');
+      flowTip.style.left = (event.clientX + 14) + 'px';
+      flowTip.style.top = (event.clientY - 14) + 'px';
+    })
+    .on('mousemove', (event) => { flowTip.style.left = (event.clientX+14)+'px'; flowTip.style.top = (event.clientY-14)+'px'; })
+    .on('mouseout', () => flowTip.classList.remove('visible'));
   });
+
+  // Jurisdiction descriptions for common offshore/secrecy jurisdictions
+  const jurDescriptions = {
+    'BVI': 'British Virgin Islands — leading offshore jurisdiction, ~400K+ active companies, minimal disclosure',
+    'PA': 'Panama — major offshore center, bearer shares historically allowed',
+    'KY': 'Cayman Islands — major financial center, no direct taxation',
+    'BS': 'Bahamas — offshore banking center',
+    'JE': 'Jersey — Crown Dependency, significant offshore finance sector',
+    'GG': 'Guernsey — Crown Dependency, offshore finance and fund domiciliation',
+    'IM': 'Isle of Man — Crown Dependency, light-touch regulation',
+    'LU': 'Luxembourg — EU holding company hub, favourable tax rulings',
+    'CY': 'Cyprus — EU member, popular for holding structures',
+    'MT': 'Malta — EU member, gaming and financial services licensing',
+    'HK': 'Hong Kong — major financial center, gateway to Asia',
+    'SG': 'Singapore — Asian financial center, strict privacy laws',
+    'CH': 'Switzerland — banking secrecy traditions, wealth management hub',
+    'AE': 'United Arab Emirates — Dubai/Abu Dhabi free zones, rapid growth',
+    'SC': 'Seychelles — offshore IBCs, minimal reporting requirements',
+    'MU': 'Mauritius — gateway to India/Africa, GBC licensing',
+    'GB': 'United Kingdom — London financial center, Companies House registry',
+    'US': 'United States — Delaware/Nevada/Wyoming LLCs, beneficial ownership gaps',
+    'PT': 'Portugal', 'AO': 'Angola', 'MZ': 'Mozambique', 'BR': 'Brazil',
+  };
 
   // Right nodes + labels (jurisdictions)
   allJur.forEach(jur => {
     const yPos = yR(jur) + yR.bandwidth()/2;
-    gf.append('circle').attr('cx',innerW).attr('cy',yPos).attr('r',7)
+    const cnt = Object.values(personToJurisdictions).filter(p => p.jurisdictions.includes(jur)).length;
+    const jurG = gf.append('g').attr('cursor', 'pointer');
+    jurG.append('circle').attr('cx',innerW).attr('cy',yPos).attr('r',7)
       .attr('fill','var(--icij-color)');
-    gf.append('text').attr('x',innerW+14).attr('y',yPos).attr('dy','0.35em')
+    jurG.append('text').attr('x',innerW+14).attr('y',yPos).attr('dy','0.35em')
       .attr('text-anchor','start').attr('fill','var(--text)').attr('font-size','13px')
       .attr('font-weight','600').text(jur);
-    // Count
-    const cnt = Object.values(personToJurisdictions).filter(p => p.jurisdictions.includes(jur)).length;
-    gf.append('text').attr('x',innerW+14).attr('y',yPos+14)
+    jurG.append('text').attr('x',innerW+14).attr('y',yPos+14)
       .attr('text-anchor','start').attr('fill','var(--text-dim)').attr('font-size','10px')
       .text(`${cnt} person${cnt>1?'s':''}`);
+    jurG.on('mouseover', (event) => {
+      const desc = jurDescriptions[jur] || jur;
+      const persons = leftNames.filter(n => personToJurisdictions[n].jurisdictions.includes(jur));
+      let html = `<strong>${desc}</strong>`;
+      html += `<br><span style="color:var(--text-dim)">Connected persons:</span> ${persons.slice(0, 5).join(', ')}${persons.length > 5 ? ` +${persons.length - 5} more` : ''}`;
+      const entityCount = (allCountries[jur] || 0);
+      if (entityCount) html += `<br><span style="color:var(--text-dim)">Total entities in this jurisdiction:</span> ${entityCount}`;
+      flowTip.innerHTML = html;
+      flowTip.classList.add('visible');
+      flowTip.style.left = (event.clientX + 14) + 'px';
+      flowTip.style.top = (event.clientY - 14) + 'px';
+    })
+    .on('mousemove', (event) => { flowTip.style.left = (event.clientX+14)+'px'; flowTip.style.top = (event.clientY-14)+'px'; })
+    .on('mouseout', () => flowTip.classList.remove('visible'));
   });
 })();
 
@@ -2160,8 +2614,34 @@ function goToPattern(patternName) {
       return full.length > 35 ? full.slice(0,33)+'..' : full;
     });
 
-  // Add tooltips for full names
-  node.append('title').text(d => d.data._fullName || d.data.name);
+  // Rich HTML tooltips
+  const ownerTip = document.getElementById('tooltip');
+  const srcLabels = { icij: 'ICIJ Offshore Leaks', opensanctions: 'OpenSanctions', both: 'Multiple Sources', gleif: 'GLEIF LEI Registry', sec: 'SEC EDGAR', companies_house: 'UK Companies House', courtlistener: 'CourtListener', aleph: 'OCCRP Aleph', wikidata: 'Wikidata', land_registry: 'Land Registry' };
+  node.on('mouseover', (event, d) => {
+    const n = d.data._node;
+    let html = `<strong>${d.data._fullName || d.data.name}</strong>`;
+    if (n) {
+      if (n.type) html += ` <span style="color:var(--text-dim)">(${n.type})</span>`;
+      html += `<br><span style="color:var(--text-dim)">Source:</span> ${srcLabels[n.source] || n.source || '?'}`;
+      if (n.country_codes && n.country_codes.length) html += `<br><span style="color:var(--text-dim)">Countries:</span> ${n.country_codes.join(', ')}`;
+      if (n.investigation) html += `<br><span style="color:var(--text-dim)">Investigation:</span> ${n.investigation.replace(/-/g, ' ')}`;
+      if (n.sanctioned) html += `<br><span style="color:var(--sanction-color);font-weight:600">Sanctioned — on international sanctions lists</span>`;
+      if (n.pep) html += `<br><span style="color:var(--pep-color);font-weight:600">Politically Exposed Person</span>`;
+      if (n.risk_score > 0) {
+        const rc = n.risk_level === 'CRITICAL' ? 'var(--sanction-color)' : n.risk_level === 'HIGH' ? '#f0883e' : n.risk_level === 'MEDIUM' ? 'var(--pep-color)' : 'var(--text-dim)';
+        html += `<br><span style="color:var(--text-dim)">Risk:</span> <span style="color:${rc};font-weight:600">${n.risk_score}/100 (${n.risk_level})</span>`;
+      }
+    }
+    ownerTip.innerHTML = html;
+    ownerTip.classList.add('visible');
+    ownerTip.style.left = (event.clientX + 14) + 'px';
+    ownerTip.style.top = (event.clientY - 14) + 'px';
+  })
+  .on('mousemove', (event) => {
+    ownerTip.style.left = (event.clientX + 14) + 'px';
+    ownerTip.style.top = (event.clientY - 14) + 'px';
+  })
+  .on('mouseout', () => ownerTip.classList.remove('visible'));
 })();
 
 // ============================================================
@@ -2377,7 +2857,8 @@ function goToPattern(patternName) {
       if (!isNaN(d)) events.push({
         date: d, source: 'courtlistener',
         headline: n.label.length > 50 ? n.label.slice(0, 48) + '...' : n.label,
-        detail: `Federal court case filed.`,
+        detail: `Federal court case filed. The subject or a related entity appears as a party in this US court proceeding.`,
+        node: n,
       });
     }
   });
@@ -2387,10 +2868,14 @@ function goToPattern(patternName) {
     const fd = n.file_date;
     if (n.source === 'sec' && fd) {
       const d = new Date(fd);
+      // Try to extract CIK for a direct link
+      const cikMatch = (n.label || '').match(/CIK\s*(\d+)/i);
+      const cikLink = cikMatch ? `<a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cikMatch[1]}&type=&dateb=&owner=include&count=10" target="_blank" rel="noopener" style="color:var(--sec-color);text-decoration:underline">View on SEC EDGAR →</a>` : '';
       if (!isNaN(d)) events.push({
         date: d, source: 'sec',
         headline: `SEC filing: ${n.label.length > 40 ? n.label.slice(0, 38) + '...' : n.label}`,
-        detail: `Filing mentioning the subject in SEC EDGAR.`,
+        detail: `Public company filing mentioning the subject. SEC filings include 10-K annual reports, 10-Q quarterly reports, and 8-K material events.${cikLink ? ' ' + cikLink : ''}`,
+        node: n,
       });
     }
   });
@@ -2399,10 +2884,13 @@ function goToPattern(patternName) {
   nodes.forEach(n => {
     if (n.incorporation_date) {
       const d = new Date(n.incorporation_date);
+      const jur = n.country_codes && n.country_codes.length ? n.country_codes.join('/') : '';
+      const srcLabel2 = srcLabels[n.source] || n.source;
       if (!isNaN(d)) events.push({
         date: d, source: n.source || 'icij',
         headline: `${n.label.length > 40 ? n.label.slice(0, 38) + '...' : n.label} incorporated`,
-        detail: `Entity formed${n.country_codes && n.country_codes.length ? ' in ' + n.country_codes.join('/') : ''}.`,
+        detail: `Entity formed${jur ? ' in ' + jur : ''}. Source: ${srcLabel2 || 'unknown'}.${n.sanctioned ? ' ⚠ This entity is sanctioned.' : ''}${n.pep ? ' This entity has PEP connections.' : ''}`,
+        node: n,
       });
     }
   });
@@ -2695,18 +3183,44 @@ hopSlider.addEventListener('input', () => {
   applyFilters();
 });
 
+// Pre-build adjacency for neighbor lookup
+const neighborMap = {};
+edges.forEach(e => {
+  const s = e.source.id || e.source, t = e.target.id || e.target;
+  if (!neighborMap[s]) neighborMap[s] = new Set();
+  if (!neighborMap[t]) neighborMap[t] = new Set();
+  neighborMap[s].add(t);
+  neighborMap[t].add(s);
+});
+
 function applyFilters() {
-  const showIcij=document.getElementById('toggleIcij').checked;
-  const showOs=document.getElementById('toggleOs').checked;
+  // Build set of hidden sources from dropdown checkboxes
+  const hiddenSources = new Set();
+  sfPanel.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    if (!cb.checked) hiddenSources.add(cb.dataset.source);
+  });
   const showAddr=document.getElementById('toggleAddresses').checked;
   const search=document.getElementById('searchInput').value.toLowerCase();
   const maxVisibleHop = parseInt(hopSlider.value);
+
+  // First pass: find nodes matching the search text
+  const searchMatched = new Set();
+  if (search) {
+    nodes.forEach(d => {
+      if (d.label.toLowerCase().includes(search)) searchMatched.add(d.id);
+    });
+    // Include direct neighbors of matched nodes
+    searchMatched.forEach(id => {
+      (neighborMap[id] || []).forEach(nid => searchMatched.add(nid));
+    });
+  }
+
   node.attr('display',d=>{
     if((d.hop||0)>maxVisibleHop)return'none';
-    if(!showIcij&&d.source==='icij')return'none';
-    if(!showOs&&d.source==='opensanctions')return'none';
+    if(hiddenSources.has(d.source))return'none';
+    if(d.source==='both'&&hiddenSources.has('icij')&&hiddenSources.has('opensanctions'))return'none';
     if(!showAddr&&isAddress(d))return'none';
-    if(search&&!d.label.toLowerCase().includes(search))return'none';
+    if(search&&!searchMatched.has(d.id))return'none';
     return null;
   });
   const vis=new Set();
@@ -2720,10 +3234,12 @@ function applyFilters() {
     return vis.has(s)&&vis.has(t)?null:'none';
   });
 }
-document.getElementById('toggleIcij').addEventListener('change',applyFilters);
-document.getElementById('toggleOs').addEventListener('change',applyFilters);
 document.getElementById('toggleAddresses').addEventListener('change',applyFilters);
 document.getElementById('searchInput').addEventListener('input',applyFilters);
+// Auto-enable address toggle if investigatively significant addresses exist
+if (nodes.some(d => isAddress(d) && (degreeMap[d.id] || 0) >= 3)) {
+  document.getElementById('toggleAddresses').checked = true;
+}
 applyFilters();
 
 // ============================================================
@@ -2842,6 +3358,528 @@ if (coverageTable) makeSortable(coverageTable);
     renderBanner(document.getElementById('flowPatternBanner'), patternMatches,
       'All Detected Patterns', 'No patterns specifically matched jurisdiction keywords, showing all detected patterns for context.');
   }
+})();
+
+
+// ============================================================
+// ENRICHMENT DATA (optional — from investigation_data passthrough)
+// ============================================================
+const enrichment = data.enrichment || {};
+const secFinancials = enrichment.sec_financials || null;
+const ukAccounts = enrichment.uk_accounts || null;
+const ukCharges = enrichment.uk_charges || null;
+const ukFilingHistory = enrichment.uk_filing_history || null;
+const secFilings = enrichment.sec_filings || null;
+const wikidataFamily = enrichment.wikidata_family || null;
+const wikidataCareer = enrichment.wikidata_career || null;
+const wikidataPep = enrichment.wikidata_pep || null;
+const courtCases = enrichment.court_cases || null;
+const courtDetails = enrichment.court_details || null;
+const courtComplaints = enrichment.court_complaints || null;
+const temporalOverlaps = enrichment.temporal_overlaps || null;
+
+// ============================================================
+// ENRICHMENT: Financials Tab
+// ============================================================
+(function buildFinancialsTab() {
+  const hasData = secFinancials || ukAccounts || ukCharges;
+  if (!hasData) return;
+
+  // Show tab button
+  const btn = document.querySelector('.tab-btn[data-tab="financials"]');
+  if (btn) btn.classList.add('has-data');
+
+  const container = document.getElementById('financialsContent');
+  if (!container) return;
+  let html = '';
+
+  // SEC XBRL Financial Metrics
+  if (secFinancials && secFinancials.length) {
+    html += '<div class="financials-section"><h4>SEC Financial Metrics (XBRL)</h4>';
+    html += '<table class="financials-table"><thead><tr>';
+    html += '<th>Metric</th><th>Period</th><th style="text-align:right">Value</th><th>Form</th><th>Filed</th>';
+    html += '</tr></thead><tbody>';
+    secFinancials.forEach(m => {
+      const val = m.value != null ? (typeof m.value === 'number' ? m.value.toLocaleString() : m.value) : '-';
+      html += '<tr>';
+      html += '<td style="color:var(--text);font-weight:500">' + (m.metric || m.label || m.concept || '-') + '</td>';
+      html += '<td>' + (m.period || m.end || '-') + '</td>';
+      html += '<td class="value-cell" style="color:var(--text)">' + val + '</td>';
+      html += '<td>' + (m.form || '-') + '</td>';
+      html += '<td>' + (m.filed || m.filed_date || '-') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // UK Accounts Summary
+  if (ukAccounts) {
+    html += '<div class="financials-section"><h4>UK Companies House — Accounts</h4>';
+    html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px 18px">';
+    const items = [
+      ['Account Type', ukAccounts.type || ukAccounts.account_type || '-'],
+      ['Last Accounts Period', (ukAccounts.last_period_start || '-') + ' to ' + (ukAccounts.last_period_end || ukAccounts.last_made_up_to || '-')],
+      ['Next Accounts Due', ukAccounts.next_due || ukAccounts.next_accounts_due || '-'],
+    ];
+    items.forEach(([label, value]) => {
+      html += '<div class="detail-row"><span class="label">' + label + '</span><span>' + value + '</span></div>';
+    });
+    if (ukAccounts.overdue) {
+      html += '<div style="margin-top:8px"><span class="overdue-flag">OVERDUE</span> — accounts are past due date. This may indicate a dormant or dissolved company.</div>';
+    }
+    html += '</div></div>';
+  }
+
+  // UK Charges
+  if (ukCharges && ukCharges.length) {
+    html += '<div class="financials-section"><h4>UK Companies House — Charge Register</h4>';
+    html += '<table class="financials-table"><thead><tr>';
+    html += '<th>Charge #</th><th>Status</th><th>Persons Entitled</th><th>Created</th><th>Satisfied</th>';
+    html += '</tr></thead><tbody>';
+    ukCharges.forEach(c => {
+      const status = (c.status || '').toLowerCase();
+      const statusCls = status.includes('outstanding') ? 'charge-status-outstanding' :
+                         status.includes('satisfied') ? 'charge-status-satisfied' : '';
+      html += '<tr>';
+      html += '<td style="color:var(--text)">' + (c.charge_number || c.charge_code || '-') + '</td>';
+      html += '<td class="' + statusCls + '">' + (c.status || '-') + '</td>';
+      html += '<td>' + (Array.isArray(c.persons_entitled) ? c.persons_entitled.map(p => p.name || p).join(', ') : (c.persons_entitled || '-')) + '</td>';
+      html += '<td>' + (c.created_on || c.created || '-') + '</td>';
+      html += '<td>' + (c.satisfied_on || c.satisfied || '-') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  container.innerHTML = html;
+})();
+
+// ============================================================
+// ENRICHMENT: Filing Timeline extension (swim lane in existing timeline)
+// ============================================================
+(function buildFilingTimeline() {
+  if (!ukFilingHistory && !secFilings) return;
+
+  // Add filing events to the multi-source timeline SVG
+  const svgEl = d3.select('#multiTimelineSvg');
+  if (!svgEl.node()) return;
+
+  const filingEvents = [];
+  const categoryColors = {
+    'accounts': 'var(--uk-color)',
+    'confirmation-statement': 'var(--gleif-color)',
+    'annual-return': 'var(--gleif-color)',
+    'officers': 'var(--wikidata-color)',
+    'address': 'var(--land-color)',
+    'capital': 'var(--sec-color)',
+    'incorporation': 'var(--icij-color)',
+    'resolution': 'var(--os-color)',
+    'mortgage': 'var(--pep-color)',
+    'default': 'var(--uk-color)',
+  };
+
+  // CH filings
+  if (ukFilingHistory && ukFilingHistory.items) {
+    (ukFilingHistory.items || []).forEach(f => {
+      if (!f.date) return;
+      const d = new Date(f.date);
+      if (isNaN(d)) return;
+      const cat = (f.category || 'default').toLowerCase();
+      filingEvents.push({
+        date: d,
+        label: f.description || f.type || 'CH Filing',
+        source: 'companies_house',
+        category: cat,
+        color: categoryColors[cat] || categoryColors['default'],
+        late: f.late || false,
+        gap: false,
+      });
+    });
+
+    // Highlight filing gaps
+    if (ukFilingHistory.gaps) {
+      (ukFilingHistory.gaps || []).forEach(gap => {
+        if (!gap.from) return;
+        const d = new Date(gap.from);
+        if (isNaN(d)) return;
+        filingEvents.push({
+          date: d,
+          label: 'Filing gap: ' + (gap.description || gap.from + ' to ' + (gap.to || '?')),
+          source: 'companies_house',
+          category: 'gap',
+          color: 'var(--sanction-color)',
+          late: false,
+          gap: true,
+        });
+      });
+    }
+  }
+
+  // SEC filings
+  if (secFilings && Array.isArray(secFilings)) {
+    secFilings.forEach(f => {
+      const dateStr = f.filed || f.filing_date || f.date;
+      if (!dateStr) return;
+      const d = new Date(dateStr);
+      if (isNaN(d)) return;
+      filingEvents.push({
+        date: d,
+        label: (f.form || f.type || 'SEC') + ': ' + (f.description || f.title || ''),
+        source: 'sec',
+        category: 'sec-filing',
+        color: 'var(--sec-color)',
+        late: false,
+        gap: false,
+      });
+    });
+  }
+
+  if (filingEvents.length === 0) return;
+
+  // Get existing SVG dimensions and add a new swim lane
+  const currentHeight = parseInt(svgEl.attr('height')) || 400;
+  const laneHeight = 70;
+  const newHeight = currentHeight + laneHeight + 20;
+  svgEl.attr('height', newHeight);
+
+  const w = parseInt(svgEl.attr('width')) || 700;
+  const margin = { left: 120, right: 40 };
+  const innerW = w - margin.left - margin.right;
+
+  // Find x scale from existing events — recompute to include filing dates
+  const allDates = filingEvents.map(e => e.date);
+  // Also gather any existing events visible in the SVG
+  const existingCircles = svgEl.selectAll('circle');
+  if (existingCircles.size() > 0) {
+    // Use the existing x domain if available — approximate from circle positions
+  }
+
+  const x = d3.scaleTime()
+    .domain(d3.extent(allDates))
+    .range([0, innerW])
+    .nice();
+
+  const laneY = currentHeight - 30; // Position before bottom axis
+  const g = svgEl.append('g').attr('transform', 'translate(' + margin.left + ',' + laneY + ')');
+
+  // Lane label
+  g.append('text').attr('x', -8).attr('y', laneHeight / 2)
+    .attr('dy', '0.35em').attr('text-anchor', 'end')
+    .attr('fill', 'var(--text-muted)').attr('font-size', '11px').attr('font-weight', '600')
+    .text('Filings');
+
+  // Lane background
+  g.append('rect').attr('x', 0).attr('y', 0).attr('width', innerW).attr('height', laneHeight)
+    .attr('fill', 'var(--surface)').attr('rx', 4);
+
+  // Filing dots
+  const tip = document.getElementById('tooltip');
+  filingEvents.forEach(ev => {
+    const cx = x(ev.date);
+    const cy = laneHeight / 2 + (Math.random() - 0.5) * (laneHeight * 0.5);
+
+    if (ev.gap) {
+      // Red diamond for gaps
+      g.append('rect')
+        .attr('x', cx - 5).attr('y', cy - 5)
+        .attr('width', 10).attr('height', 10)
+        .attr('transform', 'rotate(45,' + cx + ',' + cy + ')')
+        .attr('fill', 'var(--sanction-color)').attr('fill-opacity', 0.8)
+        .style('cursor', 'pointer')
+        .on('mouseover', (event) => {
+          tip.innerHTML = '<strong style="color:var(--sanction-color)">Filing Gap</strong><br>' + ev.label + '<br>' + ev.date.toISOString().slice(0, 10);
+          tip.classList.add('visible');
+          tip.style.left = (event.clientX + 14) + 'px';
+          tip.style.top = (event.clientY - 14) + 'px';
+        })
+        .on('mouseout', () => tip.classList.remove('visible'));
+    } else if (ev.late) {
+      // Red-outlined circle for late filings
+      g.append('circle')
+        .attr('cx', cx).attr('cy', cy).attr('r', 5)
+        .attr('fill', ev.color).attr('fill-opacity', 0.6)
+        .attr('stroke', 'var(--sanction-color)').attr('stroke-width', 2)
+        .style('cursor', 'pointer')
+        .on('mouseover', (event) => {
+          tip.innerHTML = '<strong>' + ev.label + '</strong><br><span style="color:var(--sanction-color)">Late filing</span><br>' + ev.date.toISOString().slice(0, 10);
+          tip.classList.add('visible');
+          tip.style.left = (event.clientX + 14) + 'px';
+          tip.style.top = (event.clientY - 14) + 'px';
+        })
+        .on('mouseout', () => tip.classList.remove('visible'));
+    } else {
+      // Normal dot
+      g.append('circle')
+        .attr('cx', cx).attr('cy', cy).attr('r', 4)
+        .attr('fill', ev.color).attr('fill-opacity', 0.7)
+        .attr('stroke', 'var(--bg)').attr('stroke-width', 1)
+        .style('cursor', 'pointer')
+        .on('mouseover', (event) => {
+          tip.innerHTML = '<strong>' + ev.label.slice(0, 60) + '</strong><br>' + ev.date.toISOString().slice(0, 10) + '<br><span style="color:var(--text-dim)">' + ev.source + '</span>';
+          tip.classList.add('visible');
+          tip.style.left = (event.clientX + 14) + 'px';
+          tip.style.top = (event.clientY - 14) + 'px';
+        })
+        .on('mouseout', () => tip.classList.remove('visible'));
+    }
+  });
+
+  // X axis for filing lane
+  g.append('g').attr('transform', 'translate(0,' + laneHeight + ')')
+    .call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat('%Y')))
+    .selectAll('text').attr('fill', 'var(--text-muted)').attr('font-size', '10px');
+  g.selectAll('.domain,.tick line').attr('stroke', 'var(--border)');
+})();
+
+// ============================================================
+// ENRICHMENT: Temporal Correlation (vertical lines on timeline)
+// ============================================================
+(function buildTemporalCorrelation() {
+  if (!temporalOverlaps || !temporalOverlaps.length) return;
+
+  const svgEl = d3.select('#multiTimelineSvg');
+  if (!svgEl.node()) return;
+
+  const w = parseInt(svgEl.attr('width')) || 700;
+  const h = parseInt(svgEl.attr('height')) || 400;
+  const margin = { top: 40, left: 120, right: 40 };
+  const innerW = w - margin.left - margin.right;
+
+  // Collect all dates to build x scale
+  const allDates = [];
+  temporalOverlaps.forEach(ov => {
+    if (ov.date_a) allDates.push(new Date(ov.date_a));
+    if (ov.date_b) allDates.push(new Date(ov.date_b));
+  });
+  if (allDates.length === 0) return;
+
+  const x = d3.scaleTime()
+    .domain(d3.extent(allDates))
+    .range([0, innerW])
+    .nice();
+
+  const g = svgEl.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+  const tip = document.getElementById('tooltip');
+
+  temporalOverlaps.forEach((ov, i) => {
+    const dateA = new Date(ov.date_a);
+    const dateB = new Date(ov.date_b);
+    if (isNaN(dateA) || isNaN(dateB)) return;
+
+    const xA = x(dateA);
+    const xB = x(dateB);
+    const xMid = (xA + xB) / 2;
+    const yTop = 10;
+    const yBottom = h - margin.top - 60;
+
+    // Vertical connecting line
+    g.append('line')
+      .attr('x1', xMid).attr('y1', yTop)
+      .attr('x2', xMid).attr('y2', yBottom)
+      .attr('class', 'temporal-overlap-line');
+
+    // Small label at top
+    const labelText = ov.label || ('Temporal overlap: ' + (ov.event_a || '?') + ' <> ' + (ov.event_b || '?'));
+    g.append('text')
+      .attr('x', xMid).attr('y', yTop - 4)
+      .attr('text-anchor', 'middle')
+      .attr('class', 'temporal-overlap-label')
+      .text(labelText.length > 50 ? labelText.slice(0, 48) + '..' : labelText)
+      .style('cursor', 'pointer')
+      .on('mouseover', (event) => {
+        const daysDiff = Math.abs(Math.round((dateB - dateA) / (1000 * 60 * 60 * 24)));
+        tip.innerHTML = '<strong style="color:var(--pep-color)">Temporal Overlap</strong><br>' +
+          (ov.event_a || 'Event A') + ': ' + dateA.toISOString().slice(0, 10) + '<br>' +
+          (ov.event_b || 'Event B') + ': ' + dateB.toISOString().slice(0, 10) + '<br>' +
+          '<span style="color:var(--pep-color)">' + daysDiff + ' days apart</span>';
+        tip.classList.add('visible');
+        tip.style.left = (event.clientX + 14) + 'px';
+        tip.style.top = (event.clientY - 14) + 'px';
+      })
+      .on('mouseout', () => tip.classList.remove('visible'));
+  });
+})();
+
+// ============================================================
+// ENRICHMENT: People Tab
+// ============================================================
+(function buildPeopleTab() {
+  const hasData = wikidataFamily || wikidataCareer || wikidataPep;
+  if (!hasData) return;
+
+  // Show tab button
+  const btn = document.querySelector('.tab-btn[data-tab="people"]');
+  if (btn) btn.classList.add('has-data');
+
+  const container = document.getElementById('peopleContent');
+  if (!container) return;
+  let html = '';
+
+  // Family relationships
+  if (wikidataFamily && (wikidataFamily.length || Object.keys(wikidataFamily).length)) {
+    html += '<div class="people-section"><h4>Family Relationships</h4>';
+    html += '<ul class="family-list">';
+
+    const familyItems = Array.isArray(wikidataFamily) ? wikidataFamily : [];
+    // Also handle object format: { spouse: [...], children: [...], ... }
+    const relationGroups = ['spouse', 'parent', 'child', 'sibling', 'father', 'mother'];
+    if (!Array.isArray(wikidataFamily)) {
+      relationGroups.forEach(rel => {
+        const items = wikidataFamily[rel] || wikidataFamily[rel + 's'] || [];
+        (Array.isArray(items) ? items : [items]).forEach(person => {
+          if (person) familyItems.push({ relation: rel, ...( typeof person === 'string' ? { name: person } : person ) });
+        });
+      });
+    }
+
+    familyItems.forEach(person => {
+      const name = person.name || person.label || person.value || '?';
+      const relation = (person.relation || person.type || '').replace(/_/g, ' ');
+      const dates = person.dates || person.birth_date || '';
+      let badges = '';
+      if (person.pep || person.is_pep) badges += '<span class="status-badge pep-badge">PEP</span>';
+      if (person.sanctioned || person.is_sanctioned) badges += '<span class="status-badge sanctioned-badge">SANCTIONED</span>';
+      html += '<li class="family-item">';
+      html += '<span class="relation-label">' + relation + '</span>';
+      html += '<span class="person-name">' + name + '</span>';
+      if (dates) html += '<span class="person-dates">' + dates + '</span>';
+      html += badges;
+      html += '</li>';
+    });
+
+    html += '</ul></div>';
+  }
+
+  // Career / Education / Political Positions timeline
+  const careerItems = [];
+  if (wikidataCareer && Array.isArray(wikidataCareer)) {
+    wikidataCareer.forEach(c => careerItems.push({ ...c, _type: 'career' }));
+  }
+  if (wikidataPep && Array.isArray(wikidataPep)) {
+    wikidataPep.forEach(p => careerItems.push({ ...p, _type: 'political' }));
+  }
+
+  if (careerItems.length) {
+    // Sort by start date
+    careerItems.sort((a, b) => {
+      const da = a.start || a.start_date || a.inception || '0000';
+      const db = b.start || b.start_date || b.inception || '0000';
+      return da.localeCompare(db);
+    });
+
+    html += '<div class="people-section"><h4>Career &amp; Political Positions</h4>';
+    html += '<div class="career-timeline">';
+
+    careerItems.forEach(item => {
+      const isPolitical = item._type === 'political';
+      const title = item.position || item.title || item.label || item.role || '?';
+      const org = item.employer || item.organization || item.of || item.institution || '';
+      const start = item.start || item.start_date || item.inception || '';
+      const end = item.end || item.end_date || item.dissolved || 'present';
+      const dateRange = start ? (start + ' - ' + end) : '';
+
+      html += '<div class="career-entry' + (isPolitical ? ' political' : '') + '">';
+      if (dateRange) html += '<div class="career-dates">' + dateRange + '</div>';
+      html += '<div class="career-title">' + title;
+      if (isPolitical) html += ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(210,153,34,0.2);color:var(--pep-color);font-weight:700;margin-left:4px">POLITICAL</span>';
+      html += '</div>';
+      if (org) html += '<div class="career-org">' + org + '</div>';
+      html += '</div>';
+    });
+
+    html += '</div></div>';
+  }
+
+  container.innerHTML = html;
+})();
+
+// ============================================================
+// ENRICHMENT: Litigation Tab
+// ============================================================
+(function buildLitigationTab() {
+  // Check for any court data
+  const cases = courtCases || (courtDetails ? Object.values(courtDetails) : null);
+  if (!cases || !cases.length) return;
+
+  // Show tab button
+  const btn = document.querySelector('.tab-btn[data-tab="litigation"]');
+  if (btn) btn.classList.add('has-data');
+
+  const container = document.getElementById('litigationContent');
+  if (!container) return;
+  let html = '';
+
+  // Court details provide richer info; merge with cases
+  const caseList = Array.isArray(cases) ? cases : Object.values(cases);
+
+  caseList.forEach((c, idx) => {
+    const caseName = c.case_name || c.caseName || c.name || c.caption || c.label || 'Unnamed Case';
+    const nature = c.nature_of_suit || c.natureOfSuit || c.cause || '';
+    const jurisdiction = c.court || c.jurisdiction || c.court_id || '';
+    const amount = c.amount_in_dispute || c.amount || '';
+    const dateFiled = c.date_filed || c.dateFiled || c.filed || '';
+
+    html += '<div class="case-card">';
+    html += '<div class="case-name">' + caseName + '</div>';
+    html += '<div class="case-meta">';
+    if (nature) html += '<strong>Nature of Suit:</strong> ' + nature + '<br>';
+    if (jurisdiction) html += '<strong>Jurisdiction:</strong> ' + jurisdiction + '<br>';
+    if (dateFiled) html += '<strong>Filed:</strong> ' + dateFiled + '<br>';
+    if (amount) html += '<strong>Amount in Dispute:</strong> ' + (typeof amount === 'number' ? '$' + amount.toLocaleString() : amount) + '<br>';
+    html += '</div>';
+
+    // Parties
+    const plaintiffs = c.plaintiffs || c.plaintiff || [];
+    const defendants = c.defendants || c.defendant || [];
+    const parties = c.parties || [];
+    const pList = Array.isArray(plaintiffs) ? plaintiffs : [plaintiffs];
+    const dList = Array.isArray(defendants) ? defendants : [defendants];
+
+    // If parties array is provided instead of plaintiff/defendant
+    let pNames = pList.filter(Boolean).map(p => typeof p === 'string' ? p : (p.name || p.label || ''));
+    let dNames = dList.filter(Boolean).map(p => typeof p === 'string' ? p : (p.name || p.label || ''));
+
+    if (!pNames.length && !dNames.length && parties.length) {
+      parties.forEach(p => {
+        const name = typeof p === 'string' ? p : (p.name || p.label || '');
+        const role = (typeof p === 'object' ? (p.role || p.type || '') : '').toLowerCase();
+        if (role.includes('plaintiff') || role.includes('petitioner') || role.includes('appellant')) {
+          pNames.push(name);
+        } else if (role.includes('defendant') || role.includes('respondent') || role.includes('appellee')) {
+          dNames.push(name);
+        }
+      });
+    }
+
+    if (pNames.length || dNames.length) {
+      html += '<div class="case-parties">';
+      if (pNames.length) {
+        html += '<div class="party-group"><div class="party-label">Plaintiffs</div>';
+        pNames.forEach(n => { html += '<div class="party-name">' + n + '</div>'; });
+        html += '</div>';
+      }
+      if (dNames.length) {
+        html += '<div class="party-group"><div class="party-label">Defendants</div>';
+        dNames.forEach(n => { html += '<div class="party-name">' + n + '</div>'; });
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    // Complaint text (collapsible)
+    const complaint = courtComplaints && (courtComplaints[c.id] || courtComplaints[c.docket_id] || courtComplaints[idx]);
+    const complaintText = complaint ? (typeof complaint === 'string' ? complaint : (complaint.text || complaint.content || '')) : '';
+    if (complaintText) {
+      const toggleId = 'complaint-toggle-' + idx;
+      const textId = 'complaint-text-' + idx;
+      html += '<div class="complaint-toggle" onclick="var el=document.getElementById(\'' + textId + '\');el.classList.toggle(\'open\');this.textContent=el.classList.contains(\'open\')?\'▾ Hide complaint text\':&apos;▸ Show complaint text&apos;">&#9656; Show complaint text</div>';
+      html += '<div class="complaint-text" id="' + textId + '">' + complaintText.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
+    }
+
+    html += '</div>';
+  });
+
+  container.innerHTML = html;
 })();
 </script>
 </body>
