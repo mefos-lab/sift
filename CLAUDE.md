@@ -196,6 +196,26 @@ The value is the minimum seconds between requests. When a service
 name isn't in the dict, no throttling is applied — so always add
 new services here.
 
+## Debugging API Errors
+
+When an external API returns errors (500, 502, etc.), investigate
+what we're sending before assuming the service is down.
+
+1. **Examine the actual request** — log or print the parameters
+   being sent. The problem is usually our query, not their server.
+2. **Check data type vs endpoint** — each endpoint expects a
+   specific input type. Names go to reconcile endpoints, company
+   numbers go to company endpoints, addresses are location data
+   not search queries. Sending the wrong type causes errors.
+3. **Don't discard data to work around errors** — if results cause
+   downstream problems, fix the handling, not the data. Score
+   filters and type exclusions throw away potentially meaningful
+   information. Instead, route each data type to the appropriate
+   expansion strategy.
+4. **Watch for ID prefix collisions** — node IDs like `uk-09358941`
+   (company) and `uk-psc-13214529-name` (person) both start with
+   `uk-`. Be precise when parsing IDs to extract parameters.
+
 ## Conventions
 
 - All investigation output uses professional, factual language
