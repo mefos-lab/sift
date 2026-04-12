@@ -1,3 +1,4 @@
+.DS_Store
 __pycache__/
 *.pyc
 *.egg-info/
@@ -7,5 +8,3 @@ build/
 .env
 .claude/settings.local.json
 investigations/
-test
-x
