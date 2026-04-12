@@ -652,6 +652,105 @@ async def list_tools() -> list[Tool]:
             },
         ),
 
+        Tool(
+            name="sec_financials",
+            description=(
+                "Get structured XBRL financial data for an SEC-registered "
+                "company: revenue, total assets, liabilities, net income, "
+                "cash, equity, and debt. Returns the most recent 3 annual "
+                "and latest quarterly values."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cik": {
+                        "type": "string",
+                        "description": "SEC Central Index Key (CIK) number",
+                    },
+                },
+                "required": ["cik"],
+            },
+        ),
+
+        Tool(
+            name="sec_subsidiaries",
+            description=(
+                "Extract the subsidiary list (Exhibit 21) from a company's "
+                "most recent 10-K annual report. Returns subsidiary names "
+                "and their jurisdictions of incorporation. Use this to map "
+                "the full corporate structure of a public company."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cik": {
+                        "type": "string",
+                        "description": "SEC Central Index Key (CIK) number",
+                    },
+                },
+                "required": ["cik"],
+            },
+        ),
+        Tool(
+            name="sec_related_party",
+            description=(
+                "Extract Item 13 (Related Party Transactions) from the "
+                "latest 10-K filing. Returns counterparty names, amounts, "
+                "and the full section text."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cik": {
+                        "type": "string",
+                        "description": "SEC Central Index Key (CIK) number",
+                    },
+                },
+                "required": ["cik"],
+            },
+        ),
+        Tool(
+            name="sec_13d",
+            description=(
+                "Get Schedule 13D/G filings showing beneficial ownership "
+                "stakes. Returns reporting person, percent of class, "
+                "purpose, and source of funds."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cik": {
+                        "type": "string",
+                        "description": "SEC Central Index Key (CIK) number",
+                    },
+                },
+                "required": ["cik"],
+            },
+        ),
+        Tool(
+            name="sec_risk_factors",
+            description=(
+                "Extract Item 1A (Risk Factors) from the latest 10-K, "
+                "filtered to paragraphs mentioning legal proceedings, "
+                "regulatory actions, investigations, or custom keywords."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cik": {
+                        "type": "string",
+                        "description": "SEC Central Index Key (CIK) number",
+                    },
+                    "keywords": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Custom keywords to filter (optional, defaults to legal/regulatory terms)",
+                    },
+                },
+                "required": ["cik"],
+            },
+        ),
+
         # =================================================================
         # UK Companies House tools
         # =================================================================
@@ -721,6 +820,85 @@ async def list_tools() -> list[Tool]:
             },
         ),
 
+        Tool(
+            name="uk_filing_history",
+            description=(
+                "Get filing history for a UK company with gap analysis. "
+                "Identifies late filings, gaps in annual filings, and address changes."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "company_number": {
+                        "type": "string",
+                        "description": "UK Companies House number",
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Filter by category (optional)",
+                        "enum": [
+                            "accounts", "address", "annual-return", "capital",
+                            "change-of-name", "confirmation-statement",
+                            "incorporation", "liquidation", "miscellaneous",
+                            "mortgage", "officers", "resolution",
+                        ],
+                    },
+                },
+                "required": ["company_number"],
+            },
+        ),
+        Tool(
+            name="uk_accounts",
+            description=(
+                "Get accounts summary for a UK company: last accounts type "
+                "and period, next due date, overdue status, and accounts filing history."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "company_number": {
+                        "type": "string",
+                        "description": "UK Companies House number",
+                    },
+                },
+                "required": ["company_number"],
+            },
+        ),
+        Tool(
+            name="uk_charges",
+            description=(
+                "Get the charge register (secured lending) for a UK company. "
+                "Shows outstanding and satisfied charges with lender names."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "company_number": {
+                        "type": "string",
+                        "description": "UK Companies House number",
+                    },
+                },
+                "required": ["company_number"],
+            },
+        ),
+        Tool(
+            name="uk_confirmation_status",
+            description=(
+                "Get confirmation statement history and flag timeliness gaps "
+                "(>14 months between filings)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "company_number": {
+                        "type": "string",
+                        "description": "UK Companies House number",
+                    },
+                },
+                "required": ["company_number"],
+            },
+        ),
+
         # =================================================================
         # CourtListener tools
         # =================================================================
@@ -763,6 +941,74 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="court_docket",
             description="Get full docket details for a US federal court case.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "docket_id": {
+                        "type": "integer",
+                        "description": "CourtListener docket ID",
+                    },
+                },
+                "required": ["docket_id"],
+            },
+        ),
+        Tool(
+            name="court_docket_entries",
+            description="Get docket entries for a US federal court case.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "docket_id": {
+                        "type": "integer",
+                        "description": "CourtListener docket ID",
+                    },
+                    "page": {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                    },
+                },
+                "required": ["docket_id"],
+            },
+        ),
+        Tool(
+            name="court_parties",
+            description=(
+                "Get parties (plaintiffs, defendants, attorneys) for a court case."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "docket_id": {
+                        "type": "integer",
+                        "description": "CourtListener docket ID",
+                    },
+                },
+                "required": ["docket_id"],
+            },
+        ),
+        Tool(
+            name="court_complaint",
+            description=(
+                "Get the complaint/petition text for a court case. Fetches "
+                "entry #1 RECAP document and parses for amounts in dispute."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "docket_id": {
+                        "type": "integer",
+                        "description": "CourtListener docket ID",
+                    },
+                },
+                "required": ["docket_id"],
+            },
+        ),
+        Tool(
+            name="court_docket_detail",
+            description=(
+                "Get enriched docket details: nature of suit, cause, "
+                "jurisdiction type, parties, and related cases."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -1168,6 +1414,95 @@ async def list_tools() -> list[Tool]:
             },
         ),
 
+        Tool(
+            name="wikidata_family",
+            description=(
+                "Get family relationships for a person: spouse, children, "
+                "parents, siblings — with dates where available."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "Wikidata entity ID (e.g. Q456034)",
+                    },
+                },
+                "required": ["entity_id"],
+            },
+        ),
+        Tool(
+            name="wikidata_career",
+            description=(
+                "Get education, employment, board memberships, and management "
+                "roles for a person from Wikidata."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "Wikidata entity ID",
+                    },
+                },
+                "required": ["entity_id"],
+            },
+        ),
+        Tool(
+            name="wikidata_citizenship",
+            description="Get country of citizenship with dates for a person.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "Wikidata entity ID",
+                    },
+                },
+                "required": ["entity_id"],
+            },
+        ),
+        Tool(
+            name="wikidata_enrich",
+            description=(
+                "Deep enrichment: family, education/career, citizenship, "
+                "and political positions in one call."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "Wikidata entity ID",
+                    },
+                },
+                "required": ["entity_id"],
+            },
+        ),
+        Tool(
+            name="wikidata_date_xref",
+            description=(
+                "Cross-reference a person's political appointment dates "
+                "against company inception dates. Flags overlaps within "
+                "±6 months — the strongest public-data investigative signal."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "person_id": {
+                        "type": "string",
+                        "description": "Wikidata entity ID for the person",
+                    },
+                    "company_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Wikidata entity IDs for companies to check",
+                    },
+                },
+                "required": ["person_id", "company_ids"],
+            },
+        ),
+
         # =================================================================
         # Deep traversal tool
         # =================================================================
@@ -1221,7 +1556,6 @@ async def list_tools() -> list[Tool]:
     ]
 
 
-@server.call_tool()
 def _not_configured(source: str, env_var: str) -> list[TextContent]:
     """Return a helpful message when an API key is missing."""
     return [TextContent(
@@ -1233,13 +1567,17 @@ def _not_configured(source: str, env_var: str) -> list[TextContent]:
     )]
 
 
+@server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     # Guard: check required clients are configured
     _os_tools = {"sanctions_search", "sanctions_match", "sanctions_entity",
                  "sanctions_adjacent", "sanctions_provenance", "sanctions_catalog",
                  "sanctions_batch_match", "sanctions_algorithms", "sanctions_monitor"}
-    _ch_tools = {"uk_search", "uk_company", "uk_officer_appointments"}
-    _cl_tools = {"court_search", "court_docket"}
+    _ch_tools = {"uk_search", "uk_company", "uk_officer_appointments",
+                 "uk_filing_history", "uk_accounts", "uk_charges",
+                 "uk_confirmation_status"}
+    _cl_tools = {"court_search", "court_docket", "court_docket_entries",
+                 "court_parties", "court_complaint", "court_docket_detail"}
 
     global _last_investigation
 
@@ -1442,6 +1780,23 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 form_type=arguments.get("form_type"),
             )
 
+        elif name == "sec_financials":
+            result = await sec_client.get_company_facts(arguments["cik"])
+
+        elif name == "sec_subsidiaries":
+            result = await sec_client.get_subsidiary_list(arguments["cik"])
+
+        elif name == "sec_related_party":
+            result = await sec_client.get_related_party_transactions(arguments["cik"])
+
+        elif name == "sec_13d":
+            result = await sec_client.get_schedule_13d(arguments["cik"])
+
+        elif name == "sec_risk_factors":
+            result = await sec_client.get_risk_factors(
+                arguments["cik"], keywords=arguments.get("keywords"),
+            )
+
         # =============================================================
         # UK Companies House tools
         # =============================================================
@@ -1477,6 +1832,23 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 arguments["officer_id"],
             )
 
+        elif name == "uk_filing_history":
+            result = await ch_client.get_filing_history(
+                arguments["company_number"],
+                category=arguments.get("category"),
+            )
+
+        elif name == "uk_accounts":
+            result = await ch_client.get_accounts(arguments["company_number"])
+
+        elif name == "uk_charges":
+            result = await ch_client.get_charges(arguments["company_number"])
+
+        elif name == "uk_confirmation_status":
+            result = await ch_client.get_confirmation_statements(
+                arguments["company_number"],
+            )
+
         # =============================================================
         # CourtListener tools
         # =============================================================
@@ -1492,6 +1864,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "court_docket":
             result = await cl_client.get_docket(arguments["docket_id"])
+
+        elif name == "court_docket_entries":
+            result = await cl_client.get_docket_entries(
+                arguments["docket_id"], page=arguments.get("page", 1),
+            )
+
+        elif name == "court_parties":
+            result = await cl_client.get_parties(arguments["docket_id"])
+
+        elif name == "court_complaint":
+            result = await cl_client.get_complaint_text(arguments["docket_id"])
+
+        elif name == "court_docket_detail":
+            result = await cl_client.get_docket_detail(arguments["docket_id"])
 
         # =============================================================
         # OCCRP Aleph tools
@@ -1554,6 +1940,23 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "wikidata_sparql":
             result = await wikidata_client.sparql(arguments["query"])
+
+        elif name == "wikidata_family":
+            result = await wikidata_client.get_family(arguments["entity_id"])
+
+        elif name == "wikidata_career":
+            result = await wikidata_client.get_education_career(arguments["entity_id"])
+
+        elif name == "wikidata_citizenship":
+            result = await wikidata_client.get_citizenship(arguments["entity_id"])
+
+        elif name == "wikidata_enrich":
+            result = await wikidata_client.get_deep_enrichment(arguments["entity_id"])
+
+        elif name == "wikidata_date_xref":
+            result = await wikidata_client.cross_reference_dates(
+                arguments["person_id"], arguments["company_ids"],
+            )
 
         # =============================================================
         # Natural language query

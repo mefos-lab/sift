@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import httpx
 from typing import Any
 
@@ -37,11 +38,16 @@ class SECEdgarClient:
         self._data = httpx.AsyncClient(
             base_url=DATA_URL, timeout=timeout, headers=headers,
         )
+        self._www = httpx.AsyncClient(
+            base_url="https://www.sec.gov", timeout=timeout,
+            headers={**headers, "Accept": "text/html, */*"},
+        )
         self._lock: asyncio.Lock | None = None
 
     async def close(self):
         await self._efts.aclose()
         await self._data.aclose()
+        await self._www.aclose()
 
     async def _rate_limit(self):
         """Enforce ~10 req/sec rate limit."""
@@ -102,7 +108,7 @@ class SECEdgarClient:
         recent = raw.get("filings", {}).get("recent", {})
         filing_count = len(recent.get("accessionNumber", []))
         filings = []
-        for i in range(min(filing_count, 20)):
+        for i in range(min(filing_count, 100)):
             filings.append({
                 "accession_number": recent["accessionNumber"][i],
                 "form": recent["form"][i],
@@ -143,3 +149,499 @@ class SECEdgarClient:
             "filings": filings,
             "count": len(filings),
         }
+
+    async def get_company_facts(self, cik: str | int) -> dict[str, Any]:
+        """Get structured XBRL financial data for a company.
+
+        Returns key financial metrics (revenue, assets, liabilities, net
+        income, equity) from the Company Facts API with values from the
+        most recent annual (10-K) and quarterly (10-Q) filings.
+        """
+        await self._rate_limit()
+        padded = _pad_cik(cik)
+        resp = await self._data.get(
+            f"/api/xbrl/companyfacts/CIK{padded}.json",
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+
+        # Extract key metrics from us-gaap taxonomy
+        us_gaap = raw.get("facts", {}).get("us-gaap", {})
+
+        # Tags we care about — maps XBRL tag to human label
+        target_tags = {
+            "Revenues": "revenue",
+            "RevenueFromContractWithCustomerExcludingAssessedTax": "revenue",
+            "SalesRevenueNet": "revenue",
+            "Assets": "total_assets",
+            "Liabilities": "total_liabilities",
+            "StockholdersEquity": "stockholders_equity",
+            "NetIncomeLoss": "net_income",
+            "CashAndCashEquivalentsAtCarryingValue": "cash",
+            "LongTermDebt": "long_term_debt",
+            "NumberOfSubsidiaries": "subsidiary_count",
+        }
+
+        metrics: dict[str, list[dict]] = {}
+        for xbrl_tag, label in target_tags.items():
+            fact = us_gaap.get(xbrl_tag)
+            if not fact:
+                continue
+            units = fact.get("units", {})
+            # Most financial facts are in USD
+            values = units.get("USD", units.get("pure", []))
+            if not values:
+                continue
+            # Get the most recent annual (10-K) and quarterly (10-Q) values
+            annual = [
+                v for v in values
+                if v.get("form") == "10-K" and v.get("val") is not None
+            ]
+            quarterly = [
+                v for v in values
+                if v.get("form") == "10-Q" and v.get("val") is not None
+            ]
+            # Sort by end date descending
+            annual.sort(key=lambda v: v.get("end", ""), reverse=True)
+            quarterly.sort(key=lambda v: v.get("end", ""), reverse=True)
+
+            entries = []
+            for v in annual[:3]:  # Last 3 annual periods
+                entries.append({
+                    "period": v.get("end", ""),
+                    "value": v["val"],
+                    "form": "10-K",
+                    "filed": v.get("filed", ""),
+                })
+            for v in quarterly[:1]:  # Most recent quarter
+                entries.append({
+                    "period": v.get("end", ""),
+                    "value": v["val"],
+                    "form": "10-Q",
+                    "filed": v.get("filed", ""),
+                })
+
+            if label not in metrics or len(entries) > len(metrics[label]):
+                metrics[label] = entries
+
+        return {
+            "cik": padded,
+            "name": raw.get("entityName", ""),
+            "metrics": metrics,
+        }
+
+    async def get_filing_documents(
+        self,
+        cik: str | int,
+        accession_number: str,
+    ) -> dict[str, Any]:
+        """List all documents within a specific filing.
+
+        Use this to find Exhibit 21 (subsidiary list), Schedule 13D/G,
+        and other exhibits by their description.
+        """
+        await self._rate_limit()
+        cik_num = str(int(str(cik).lstrip("0") or "0"))
+        acc_clean = accession_number.replace("-", "")
+        # Filing index is on www.sec.gov as HTML
+        resp = await self._www.get(
+            f"/Archives/edgar/data/{cik_num}/{acc_clean}/{accession_number}-index.htm",
+        )
+        resp.raise_for_status()
+        # Parse document links from the index page
+        documents = []
+        links = re.findall(
+            r'<a\s+href="(/Archives/edgar/data/[^"]+)">([^<]+)</a>',
+            resp.text, re.I,
+        )
+        for href, name in links:
+            if name.endswith((".json", ".xsd")):
+                continue
+            documents.append({
+                "name": name,
+                "href": href,
+            })
+        # Also find exhibit descriptions from the table
+        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", resp.text, re.I | re.S)
+        doc_types = {}
+        for row in rows:
+            cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.I | re.S)
+            if len(cells) >= 2:
+                doc_type = re.sub(r"<[^>]+>", "", cells[0]).strip()
+                doc_name = re.sub(r"<[^>]+>", "", cells[1]).strip()
+                if doc_name:
+                    doc_types[doc_name] = doc_type
+        for doc in documents:
+            doc["type"] = doc_types.get(doc["name"], "")
+        return {
+            "cik": cik_num,
+            "accession_number": accession_number,
+            "documents": documents,
+            "filing_url": f"https://www.sec.gov/Archives/edgar/data/{cik_num}/{acc_clean}/",
+        }
+
+    async def get_subsidiary_list(self, cik: str | int) -> dict[str, Any]:
+        """Extract Exhibit 21 (subsidiary list) from the most recent 10-K.
+
+        Finds the latest 10-K filing, locates Exhibit 21, fetches its
+        content, and parses subsidiary names and jurisdictions.
+        """
+        # Try recent filings first, fall back to search if no 10-K in recent
+        filings = await self.get_filings(cik, form_type="10-K")
+        if not filings.get("filings"):
+            # Search for 10-K filings via full-text search
+            padded = _pad_cik(cik)
+            search = await self.search(
+                query=f"cik:{padded}", forms="10-K", count=1,
+            )
+            if search.get("results"):
+                r = search["results"][0]
+                filings = {
+                    "name": r.get("entity_name", ""),
+                    "filings": [{
+                        "accession_number": r.get("accession_number", ""),
+                        "form": "10-K",
+                        "filing_date": r.get("file_date", ""),
+                        "primary_document": "",
+                        "primary_doc_description": "",
+                    }],
+                }
+        if not filings.get("filings"):
+            return {"cik": str(cik), "name": filings.get("name", ""), "subsidiaries": [], "error": "No 10-K filings found"}
+
+        latest = filings["filings"][0]
+        accession = latest["accession_number"]
+
+        docs = await self.get_filing_documents(cik, accession)
+
+        # Find Exhibit 21 by filename or type
+        ex21_doc = None
+        for doc in docs.get("documents", []):
+            name_lower = doc["name"].lower()
+            doc_type = doc.get("type", "").lower()
+            if ("ex21" in name_lower or "exhibit21" in name_lower
+                    or "ex-21" in name_lower or "ex-21" in doc_type):
+                ex21_doc = doc
+                break
+
+        if not ex21_doc:
+            return {
+                "cik": str(cik),
+                "name": filings.get("name", ""),
+                "subsidiaries": [],
+                "filing_date": latest.get("filing_date", ""),
+                "note": "No Exhibit 21 found in latest 10-K",
+            }
+
+        # Fetch the exhibit content via its href or constructed URL
+        await self._rate_limit()
+        if ex21_doc.get("href"):
+            resp = await self._www.get(ex21_doc["href"])
+        else:
+            cik_num = str(int(str(cik).lstrip("0") or "0"))
+            acc_clean = accession.replace("-", "")
+            resp = await self._www.get(
+                f"/Archives/edgar/data/{cik_num}/{acc_clean}/{ex21_doc['name']}",
+            )
+        resp.raise_for_status()
+        content = resp.text
+
+        # Parse subsidiaries from Exhibit 21 content
+        subsidiaries = _parse_exhibit_21(content)
+
+        return {
+            "cik": str(cik),
+            "name": filings.get("name", ""),
+            "filing_date": latest.get("filing_date", ""),
+            "accession_number": accession,
+            "subsidiaries": subsidiaries,
+            "count": len(subsidiaries),
+        }
+
+
+    async def _fetch_10k_primary(self, cik: str | int) -> dict[str, Any]:
+        """Fetch the primary document HTML of the latest 10-K filing."""
+        filings = await self.get_filings(cik, form_type="10-K")
+        if not filings.get("filings"):
+            return {"name": filings.get("name", ""), "html": "", "filing_date": ""}
+        latest = filings["filings"][0]
+        accession = latest["accession_number"]
+        primary = latest.get("primary_document", "")
+        if not primary:
+            return {"name": filings.get("name", ""), "html": "", "filing_date": latest.get("filing_date", "")}
+        await self._rate_limit()
+        cik_num = str(int(str(cik).lstrip("0") or "0"))
+        acc_clean = accession.replace("-", "")
+        resp = await self._www.get(
+            f"/Archives/edgar/data/{cik_num}/{acc_clean}/{primary}",
+        )
+        resp.raise_for_status()
+        return {
+            "name": filings.get("name", ""),
+            "html": resp.text,
+            "filing_date": latest.get("filing_date", ""),
+            "accession_number": accession,
+        }
+
+    async def get_related_party_transactions(
+        self, cik: str | int,
+    ) -> dict[str, Any]:
+        """Extract Item 13 (Related Party Transactions) from the latest 10-K."""
+        doc = await self._fetch_10k_primary(cik)
+        section = _extract_10k_section(
+            doc["html"],
+            r"Item\s*13",
+            r"Item\s*14",
+        )
+        transactions = _parse_related_party_tables(section)
+        return {
+            "cik": str(cik),
+            "name": doc["name"],
+            "filing_date": doc.get("filing_date", ""),
+            "section_text": _strip_tags(section),
+            "transactions": transactions,
+        }
+
+    async def get_schedule_13d(self, cik: str | int) -> dict[str, Any]:
+        """Get Schedule 13D/G filings showing beneficial ownership."""
+        company = await self.get_company(cik)
+        forms_13d = ["SC 13D", "SC 13D/A", "SC 13G", "SC 13G/A"]
+        filings_found = [
+            f for f in company.get("recent_filings", [])
+            if f["form"] in forms_13d
+        ]
+        results = []
+        for filing in filings_found[:5]:  # Cap at 5 most recent
+            accession = filing["accession_number"]
+            primary = filing.get("primary_document", "")
+            if not primary:
+                continue
+            try:
+                await self._rate_limit()
+                cik_num = str(int(str(cik).lstrip("0") or "0"))
+                acc_clean = accession.replace("-", "")
+                resp = await self._www.get(
+                    f"/Archives/edgar/data/{cik_num}/{acc_clean}/{primary}",
+                )
+                resp.raise_for_status()
+                parsed = _parse_schedule_13d(resp.text)
+                parsed["form"] = filing["form"]
+                parsed["filing_date"] = filing.get("filing_date", "")
+                parsed["accession_number"] = accession
+                results.append(parsed)
+            except Exception:
+                results.append({
+                    "form": filing["form"],
+                    "filing_date": filing.get("filing_date", ""),
+                    "error": "Failed to fetch/parse",
+                })
+        return {
+            "cik": str(cik),
+            "name": company.get("name", ""),
+            "filings": results,
+        }
+
+    async def get_risk_factors(
+        self,
+        cik: str | int,
+        keywords: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Extract Item 1A (Risk Factors) from latest 10-K, filtered by keywords."""
+        if keywords is None:
+            keywords = [
+                "legal proceeding", "litigation", "regulatory action",
+                "investigation", "enforcement", "SEC", "DOJ",
+                "indictment", "settlement", "consent decree", "class action",
+            ]
+        doc = await self._fetch_10k_primary(cik)
+        section = _extract_10k_section(
+            doc["html"],
+            r"Item\s*1A",
+            r"Item\s*1B|Item\s*2\b",
+        )
+        text = _strip_tags(section)
+        # Split into paragraphs
+        paragraphs = [p.strip() for p in re.split(r"\n\s*\n|\n(?=[A-Z])", text) if p.strip()]
+        matching = []
+        for para in paragraphs:
+            found = [kw for kw in keywords if kw.lower() in para.lower()]
+            if found:
+                matching.append({"text": para, "keywords_found": found})
+        return {
+            "cik": str(cik),
+            "name": doc["name"],
+            "filing_date": doc.get("filing_date", ""),
+            "total_paragraphs": len(paragraphs),
+            "matching_paragraphs": matching,
+        }
+
+
+def _strip_tags(html: str) -> str:
+    """Remove HTML tags and normalize whitespace."""
+    text = re.sub(r"</(p|tr|div|li|td|th|h\d)[^>]*>", "\n", html, flags=re.I)
+    text = re.sub(r"<(br|hr)\s*/?>", "\n", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"&nbsp;|&#160;", " ", text)
+    text = re.sub(r"&#\d+;", " ", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    return text.strip()
+
+
+def _extract_10k_section(html: str, start_pattern: str, end_pattern: str) -> str:
+    """Extract a section of a 10-K filing between two Item headers."""
+    # Look for the section start
+    start_match = re.search(start_pattern, html, re.I)
+    if not start_match:
+        return ""
+    rest = html[start_match.start():]
+    # Look for the next section header
+    end_match = re.search(end_pattern, rest[10:], re.I)
+    if end_match:
+        return rest[:end_match.start() + 10]
+    return rest
+
+
+def _parse_related_party_tables(section_html: str) -> list[dict[str, str]]:
+    """Extract counterparty/amount/description from tables in the section."""
+    transactions = []
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", section_html, re.I | re.S)
+    for row in rows:
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.I | re.S)
+        if len(cells) >= 2:
+            name = re.sub(r"<[^>]+>", "", cells[0]).strip()
+            amount = re.sub(r"<[^>]+>", "", cells[1]).strip() if len(cells) > 1 else ""
+            desc = re.sub(r"<[^>]+>", "", cells[2]).strip() if len(cells) > 2 else ""
+            if name and name.lower() not in ("name", "counterparty", "party"):
+                transactions.append({
+                    "counterparty": name,
+                    "amount": amount,
+                    "description": desc,
+                })
+    return transactions
+
+
+def _parse_schedule_13d(html: str) -> dict[str, str]:
+    """Parse Schedule 13D/G for ownership details."""
+    text = _strip_tags(html)
+    result: dict[str, str] = {
+        "reporting_person": "",
+        "source_of_funds": "",
+        "purpose": "",
+        "percent_of_class": "",
+    }
+    # Item 2 — Identity
+    m = re.search(r"Item\s*2[.\s]+(.*?)(?=Item\s*3|$)", text, re.I | re.S)
+    if m:
+        result["reporting_person"] = m.group(1).strip()[:500]
+    # Item 3 — Source of Funds
+    m = re.search(r"Item\s*3[.\s]+(.*?)(?=Item\s*4|$)", text, re.I | re.S)
+    if m:
+        result["source_of_funds"] = m.group(1).strip()[:500]
+    # Item 4 — Purpose
+    m = re.search(r"Item\s*4[.\s]+(.*?)(?=Item\s*5|$)", text, re.I | re.S)
+    if m:
+        result["purpose"] = m.group(1).strip()[:500]
+    # Percent of class — look for percentage
+    m = re.search(r"(?:percent\s+of\s+class|%\s*of\s*class)[:\s]*(\d+\.?\d*)%?", text, re.I)
+    if not m:
+        m = re.search(r"(\d+\.?\d*)\s*%", text)
+    if m:
+        result["percent_of_class"] = m.group(1) + "%"
+    return result
+
+
+def _parse_exhibit_21(html_content: str) -> list[dict[str, str]]:
+    """Parse subsidiary names and jurisdictions from Exhibit 21 HTML/text.
+
+    Exhibit 21 typically contains a table or list of subsidiaries with
+    their name and jurisdiction of incorporation/organization.
+    """
+    subsidiaries: list[dict[str, str]] = []
+
+    # Strategy 1: Parse HTML table rows directly (most reliable)
+    if "<tr" in html_content.lower():
+        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html_content, re.I | re.S)
+        for row in rows:
+            cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.I | re.S)
+            if len(cells) >= 2:
+                # Strip HTML from cell contents
+                name = re.sub(r"<[^>]+>", "", cells[0]).strip()
+                name = re.sub(r"&nbsp;|&#160;", " ", name).strip()
+                jur = re.sub(r"<[^>]+>", "", cells[-1]).strip()
+                jur = re.sub(r"&nbsp;|&#160;", " ", jur).strip()
+                # Skip header rows and empty rows
+                if (name and jur and len(name) > 2
+                        and "jurisdiction" not in name.lower()
+                        and "name" != name.lower()
+                        and not name.startswith("*")):
+                    subsidiaries.append({"name": name, "jurisdiction": jur})
+        if subsidiaries:
+            return subsidiaries
+
+    # Strategy 2: Plain text / fallback
+    if "<" in html_content:
+        text = re.sub(r"</(p|tr|div|li|td|th)[^>]*>", "\n", html_content, flags=re.I)
+        text = re.sub(r"<(br|hr)\s*/?>", "\n", text, flags=re.I)
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"&nbsp;|&#160;", " ", text)
+        text = re.sub(r"&#\d+;", " ", text)
+    else:
+        text = html_content
+
+    subsidiaries = []
+
+    # Common patterns in Exhibit 21:
+    # "Subsidiary Name    Delaware" or "Subsidiary Name (Delaware)"
+    # or table rows with name and jurisdiction columns
+
+    # Pattern 1: "Name .... Jurisdiction" (dot/space separated)
+    # Pattern 2: "Name (Jurisdiction)"
+    # Pattern 3: Tab or multi-space separated
+
+    # Try to find lines with jurisdiction keywords
+    jurisdiction_keywords = {
+        "delaware", "nevada", "california", "new york", "texas",
+        "florida", "virginia", "maryland", "massachusetts",
+        "british virgin islands", "bvi", "cayman islands",
+        "bermuda", "hong kong", "singapore", "luxembourg",
+        "ireland", "netherlands", "united kingdom", "england",
+        "england and wales", "scotland", "jersey", "guernsey",
+        "switzerland", "panama", "bahamas", "mauritius",
+        "japan", "australia", "canada", "germany", "france",
+        "brazil", "india", "china", "south korea", "israel",
+        "spain", "italy", "portugal", "belgium", "sweden",
+        "norway", "denmark", "finland", "austria", "mexico",
+        "colombia", "chile", "argentina", "south africa",
+        "nigeria", "kenya", "egypt", "uae", "dubai",
+        "qatar", "saudi arabia", "hungary", "czech republic",
+        "poland", "romania", "greece", "turkey", "thailand",
+        "indonesia", "philippines", "vietnam", "malaysia",
+        "new zealand", "cyprus", "malta", "isle of man",
+        "seychelles", "marshall islands", "liberia",
+    }
+
+    # Split into candidate lines
+    lines = re.split(r"[;\n\r]+", text)
+    for line in lines:
+        line = line.strip()
+        if len(line) < 5 or len(line) > 300:
+            continue
+
+        # Try parenthetical jurisdiction: "Company Name (Delaware)"
+        m = re.match(r"^(.+?)\s*\(([^)]+)\)\s*$", line)
+        if m:
+            name, jur = m.group(1).strip(), m.group(2).strip()
+            if jur.lower() in jurisdiction_keywords and len(name) > 2:
+                subsidiaries.append({"name": name, "jurisdiction": jur})
+                continue
+
+        # Try multi-space/tab separated: "Company Name          Delaware"
+        parts = re.split(r"\s{3,}|\t+|\.{3,}", line)
+        if len(parts) >= 2:
+            name = parts[0].strip()
+            jur = parts[-1].strip()
+            if jur.lower() in jurisdiction_keywords and len(name) > 2:
+                subsidiaries.append({"name": name, "jurisdiction": jur})
+                continue
+
+    return subsidiaries
