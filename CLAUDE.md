@@ -196,6 +196,16 @@ The value is the minimum seconds between requests. When a service
 name isn't in the dict, no throttling is applied — so always add
 new services here.
 
+## Contributor Identity
+
+Commits must use an approved email. The `hooks/pre-commit` hook
+enforces this — add new committer emails to the `ALLOWED_EMAILS`
+array in that file. After cloning, run:
+
+```bash
+git config core.hooksPath hooks
+```
+
 ## Debugging API Errors
 
 When an external API returns errors (500, 502, etc.), investigate

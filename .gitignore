@@ -7,3 +7,4 @@ build/
 .env
 .claude/settings.local.json
 investigations/
+test
