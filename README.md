@@ -24,8 +24,8 @@ An MCP server for financial investigations. Combines the [ICIJ Offshore Leaks Da
 
 ```bash
 # Clone and install
-git clone https://github.com/mefos-lab/open-investigator.git
-cd open-investigator
+git clone https://github.com/mefos-lab/sift.git
+cd sift
 uv venv && source .venv/bin/activate
 uv pip install -e .
 
