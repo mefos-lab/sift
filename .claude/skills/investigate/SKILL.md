@@ -25,16 +25,26 @@ produces structured intelligence reports.
 /investigate <name> --jurisdiction           — jurisdictional footprint
 /investigate <name1>, <name2>                — compare connections
 /investigate <name1>, <name2>, <name3>, ...  — batch exposure screening
+/investigate --scan <pattern>                — exploratory pattern hunt (no target)
+/investigate --scan all                      — run all 8 scan types
+/investigate <name> --scan <pattern>         — targeted investigation + focused scan
 ```
+
+Valid scan types: `sanctions-evasion`, `pep-opacity`, `nominee-shield`,
+`mass-registration`, `intermediary-cluster`, `rapid-dissolution`,
+`llp-opacity`, `beneficial-ownership-gap`
 
 When no flag is given, the default mode is a full cross-reference
 investigation (the most comprehensive single-name analysis).
 
+For `--scan` mode, see the dedicated section at the end.
+
 ---
 
-## Shared procedure (all modes)
+## Shared procedure (all targeted modes)
 
-These steps run regardless of mode. Mode-specific steps follow.
+These steps run for all modes that have a target name. The `--scan`
+mode (standalone, no target) has its own procedure — see below.
 
 ### Step 1: Deep traversal + independent searches (parallel)
 
@@ -48,14 +58,15 @@ deep_trace(names: ["<name>"], depth: <depth>, budget: <budget>)
 
 | Mode | depth | budget |
 |------|-------|--------|
-| default / --trace | 2 | 100 |
-| --trace --depth 3 | 3 | 100 |
-| --patterns | 2 | 100 |
-| --compliance | 1 | 50 |
+| default / --trace | 2 | 200 |
+| --trace --depth 3 | 3 | 200 |
+| --patterns | 2 | 200 |
+| --compliance | 1 | 100 |
 | --monitor | 0 (skip deep_trace) | — |
-| --jurisdiction | 2 | 100 |
-| 2-4 names | 2 | 100 |
-| 5+ names | 1 | 100 |
+| --jurisdiction | 2 | 200 |
+| 2-4 names | 2 | 200 |
+| 5+ names | 1 | 200 |
+| name + --scan | 2 | 200 |
 
 For **--monitor**, skip `deep_trace` and use `sanctions_monitor`
 directly. For **multi-name** investigations, all names go into a
@@ -98,9 +109,141 @@ launch **all enrichment calls in parallel**:
 All enrichment calls for different entities are independent — batch
 them into a single parallel tool call block.
 
-### Step 3: Pattern analysis
+### Step 3: Pattern probes (conditional, parallel)
 
-Cross-reference findings against `patterns/INDEX.yaml`:
+Analyze Steps 1-2 results for **signals** that indicate specific
+patterns. For each signal found, fire a targeted probe to confirm
+or discover the pattern. Probes only fire when their trigger is
+present. **Launch all triggered probes in a single parallel batch.**
+
+Budget for probes: up to 50 calls total from this step.
+
+#### 3a. PEP Opacity probe
+
+**Trigger**: Any node with `role.rca` in topics at hop 0 or 1.
+
+**Procedure** (3-5 calls):
+1. Identify the PEP associated with the `role.rca` node.
+2. `wikidata_family(entity_id)` on the PEP to get family member
+   names (1 call).
+3. For each family member (up to 3): `icij_search(query=family_name)`
+   (up to 3 calls).
+4. Check: do family members appear as ICIJ officers on entities
+   where the PEP's name does NOT appear?
+
+**Confirmed when**: Family member is ICIJ officer AND PEP name
+absent from that entity's officer list. Upgrades `pep_opacity_layer`
+pattern confidence to **HIGH**.
+
+#### 3b. Sanctions Evasion probe
+
+**Trigger**: Any node with `sanctioned: true` or `"sanction"` in
+topics, at hop 0-2.
+
+**Procedure** (2-3 calls):
+1. `icij_search(query=sanctioned_person_name)` (1 call).
+2. If ICIJ results found: `icij_investigate(name=sanctioned_name,
+   max_results=3)` to map their offshore network (1 call).
+
+**Confirmed when**: Sanctioned person connected (directly or via
+intermediary) to an offshore entity. Upgrades `sanctions_evasion`
+pattern confidence to **HIGH**.
+
+#### 3c. Intermediary Cluster probe
+
+**Trigger**: Any ICIJ node with type `Intermediary`.
+
+**Procedure** (1-2 calls):
+1. `icij_investigate(name=intermediary_name, max_results=10)` (1 call).
+2. Count connected entities in results.
+
+**Confirmed when**: Intermediary connected to 20+ entities.
+Upgrades `intermediary_cluster` confidence to **HIGH**.
+
+#### 3d. Nominee Shield probe
+
+**Trigger**: Any officer/person node with degree >= 5 in the
+graph, OR any officer whose name contains "nominee", "services",
+"corporate director", or similar patterns.
+
+**Procedure** (2-3 calls):
+1. `icij_investigate(name=suspect_officer, max_results=10)` (1 call).
+2. If 20+ results: `icij_search(query=suspect_officer)` to verify
+   breadth across investigations (1 call).
+3. Optionally: `sanctions_match(name=suspect_officer, threshold=0.5)`
+   to check if the nominee is flagged (1 call).
+
+**Confirmed when**: Officer found across 20+ unrelated entities in
+different jurisdictions/investigations. Upgrades `nominee_shield`
+confidence to **HIGH**.
+
+#### 3e. Beneficial Ownership Gap probe
+
+**Trigger**: Any entity node from GLEIF source, or any UK company
+node from Companies House.
+
+**Procedure** (3-5 calls):
+1. For GLEIF entities: `gleif_ownership(lei=entity_lei)` (1 call
+   per entity, max 2).
+2. For UK companies: `beneficial_owner(company=company_number)`
+   (1 call per company, max 2).
+3. Trace: if ownership chain contains only corporate entities
+   (no natural person), flag as gap.
+
+**Confirmed when**: No natural person identified as ultimate
+beneficial owner after tracing chain. Upgrades
+`beneficial_ownership_gap` confidence to **HIGH**.
+
+#### 3f. Mass Registration probe
+
+**Trigger**: Any ICIJ address node in results.
+
+**Procedure** (2-3 calls):
+1. `icij_search(query=address_text)` to find co-registered
+   entities at the same address (1 call).
+2. `icij_entity(node_id)` on the address node for full entity
+   count (1 call).
+
+**Confirmed when**: 10+ entities at same address. 100+ entities
+upgrades to CRITICAL severity. Upgrades `mass_registration`
+confidence to **HIGH**.
+
+#### 3g. LLP Opacity probe
+
+**Trigger**: Any UK company node where company name or type
+contains "LLP" or "Limited Liability Partnership".
+
+**Procedure** (2-3 calls):
+1. `uk_company(company_number=number)` — get partner info (1 call).
+2. `uk_filing_history(company_number=number)` — check for
+   dormant accounts, short filing history (1 call).
+3. Examine partner jurisdictions against secrecy list
+   (BZ, SC, MH, WS, PA, VG, KY).
+
+**Confirmed when**: LLP has corporate partners in secrecy
+jurisdictions AND no UK-based individual partner. Upgrades
+`llp_opacity_vehicle` confidence to **HIGH**.
+
+#### 3h. Rapid Dissolution probe
+
+**Trigger**: Any UK company node found in results.
+
+**Procedure** (2-3 calls):
+1. `uk_company(company_number=number)` — get incorporation date,
+   dissolution date, status (1 call).
+2. `uk_filing_history(company_number=number)` — check accounts
+   filings (1 call).
+3. `uk_officer_appointments(officer_id=officer_id)` — check
+   director nationality and other appointments (1 call).
+
+**Confirmed when**: Entity dissolved within 730 days of
+incorporation AND directors exclusively foreign AND no/dormant
+accounts filed. Upgrades `rapid_dissolution` confidence to **HIGH**.
+
+### Step 4: Pattern analysis
+
+Cross-reference all findings (including probe results from Step 3)
+against `patterns/INDEX.yaml`:
 - Starburst (hub-and-spoke)
 - Matryoshka (nested jurisdiction chains)
 - Nominee Shield (professional nominees)
@@ -111,13 +254,62 @@ Cross-reference findings against `patterns/INDEX.yaml`:
 - PEP Opacity Layer (offshore + PEP)
 - Regulatory Arbitrage Chain (jurisdiction gap exploitation)
 
+**Incorporate probe results**: When a probe confirmed a pattern
+with specific evidence, upgrade its confidence to HIGH and include
+the probe evidence in the pattern match. When a probe found no
+confirmation despite a relevant trigger, note this and keep the
+confidence at whatever the post-hoc matcher assigned (or lower it).
+
 When a NEW pattern is identified, propose adding it to the library.
 
-### Step 4: Produce report
+### Step 5: Collect timeline events
+
+Before producing the report, scan ALL data gathered in Steps 1-4
+and extract every dated event into a `timeline_events` list. This
+list is attached to the investigation data dict and drives the
+timeline visualization.
+
+**Events to extract** (scan all enrichment responses):
+
+| Source | Event type | Where to find the date |
+|--------|-----------|----------------------|
+| OpenSanctions | Sanctions designation | `sanctions[].properties.startDate` |
+| OpenSanctions | Sanctions modified | `sanctions[].properties.modifiedAt` |
+| OpenSanctions | Director disqualification | Parse from `notes` ("imposed on DD/MM/YYYY") |
+| OpenSanctions | First flagged | `first_seen` on entity |
+| OpenSanctions | Record updated | `last_change` on entity |
+| ICIJ | Leak publication | Investigation name → known year |
+| ICIJ | Entity incorporation | `incorporation_date` |
+| ICIJ | Entity dissolution | `dissolution_date` |
+| Companies House | Filing event | Filing history dates |
+| Companies House | Incorporation | Company profile |
+| Companies House | Dissolution | Company profile |
+| SEC EDGAR | Filing date | Filing metadata |
+| CourtListener | Case filed | `dateFiled` |
+| CourtListener | Case terminated | `dateTerminated` |
+| Wikidata | Position started/ended | PEP check / career dates |
+| Wikidata | Birth/death dates | Entity enrichment |
+
+Each event is a dict:
+```python
+{"date": "2025-04-09", "label": "Drex Technologies S.A.",
+ "source": "opensanctions", "type": "Director Disqualification",
+ "detail": "Imposed under Sanctions and Anti-Money Laundering Act 2018"}
+```
+
+Add the list to the data dict:
+```python
+data["timeline_events"] = events
+```
+
+The visualizer will merge these with client-side events and
+display them on the swim-lane timeline and narrative chronology.
+
+### Step 6: Produce report
 
 Use the mode-specific report template below.
 
-### Step 5: Generate next steps
+### Step 7: Generate next steps
 
 Based on the specific findings, generate a `next_steps` list and
 attach it to the investigation data dict before visualization.
@@ -145,7 +337,7 @@ data["next_steps"] = [
 ]
 ```
 
-### Step 6: Visualization
+### Step 8: Visualization
 
 After producing the report, ask:
 "Would you like an interactive network visualization?"
@@ -204,7 +396,8 @@ risk level? Lead with the most significant finding.]
 
 ### Pattern matches
 
-[Named patterns from patterns/INDEX.yaml]
+[Named patterns from patterns/INDEX.yaml, with probe evidence
+where available. Show confidence level for each.]
 
 ### Jurisdictional profile
 
@@ -289,6 +482,7 @@ and temporal patterns across all findings.
 
 #### [Pattern name] (from patterns/INDEX.yaml)
 - Evidence: [entities/connections]
+- Probe result: [confirmed/not tested/no confirmation]
 - Significance: [what it indicates]
 - Confidence: HIGH/MEDIUM/LOW
 
@@ -314,7 +508,7 @@ identifying properties for precise matching.
 Parse additional flags: `--dob`, `--nationality`, `--id`, `--jurisdiction`, `--reg`
 
 1. Run in **parallel**: `sanctions_match` (with all provided properties,
-   threshold 0.5) + `deep_trace` (depth 1, budget 50) + `icij_investigate`
+   threshold 0.5) + `deep_trace` (depth 1, budget 100) + `icij_investigate`
 2. For matches >= 0.5: `sanctions_entity` + `sanctions_provenance` (parallel)
 
 ```
@@ -404,9 +598,9 @@ reveals where the subjects' offshore structures and sanctions exposure
 1. Split input on commas, trim whitespace.
 2. Run a single `deep_trace` with all names:
    ```
-   deep_trace(names: ["name1", "name2", ...], depth: 2, budget: 100)
+   deep_trace(names: ["name1", "name2", ...], depth: 2, budget: 200)
    ```
-   For 5+ names, reduce depth to 1 (budget stays at 100).
+   For 5+ names, reduce depth to 1 (budget stays at 200).
 
 3. From the merged graph, identify **connection points** — nodes
    reachable from multiple seeds. These are the investigative core:
@@ -485,6 +679,395 @@ prominently:]
 
 ---
 
+## Mode: --scan (exploratory pattern hunt)
+
+Scan mode hunts for structural patterns across the data sources
+**without requiring a target name**. Each scan type has a hardcoded
+search strategy that generates seeds, cross-references findings,
+and confirms pattern instances.
+
+### Scan syntax
+
+```
+/investigate --scan <type>               — run one scan type
+/investigate --scan all                  — run all 8 scan types
+/investigate <name> --scan <type>        — targeted investigation + focused scan
+```
+
+### Budget
+
+| Mode | Budget |
+|------|--------|
+| `--scan <type>` (standalone) | full budget for that scan type |
+| `--scan all` | 500 total, allocated per scan (see table below) |
+| `<name> --scan <type>` | 200 for investigation + 150 for scan |
+
+### Combined mode (`<name> --scan <type>`)
+
+When a target name is provided with `--scan`:
+1. Run the normal targeted investigation (Steps 1-4) with
+   `deep_trace` budget of 200.
+2. Use the investigation results as **seeds** for the scan —
+   the entities, officers, and intermediaries discovered in Step 1
+   become the starting points for the scan probes.
+3. Run the scan strategy with 150 calls.
+4. Merge findings: the investigation report includes the scan
+   results in a dedicated "Scan findings" section, and the
+   visualization adds a "Scan Findings" tab.
+
+This is more efficient than a standalone scan because the
+investigation has already built the relevant network.
+
+### Shared scan procedure (standalone, no target name)
+
+1. Parse `--scan <type>` argument.
+2. Skip Steps 1-4 (no `deep_trace`, no enrichment, no probes).
+3. Execute the scan strategy for the specified type(s).
+4. For `--scan all`, run scans sequentially in priority order.
+   If a scan finishes under budget, reallocate its remainder to
+   the next scan.
+5. Deduplicate: if the same entity triggers multiple scan types,
+   consolidate into one finding and note all patterns matched.
+6. Produce the scan report (see template below).
+7. Offer scan visualization.
+
+### Scan strategies
+
+#### sanctions-evasion (budget: 80 calls)
+
+Find sanctioned persons who appear in ICIJ offshore leaks.
+
+1. `sanctions_search(query="", topics=["sanction"], limit=20)` —
+   get recently sanctioned entities (1 call).
+2. For the top 10 sanctioned persons (prioritize those with
+   `crime.fin` or `crime` topics):
+   `icij_search(query=sanctioned_name)` (up to 10 calls).
+3. For each ICIJ hit: `icij_investigate(name=match_name,
+   max_results=3)` to map connected entities (up to 15 calls).
+4. For officers found on those entities:
+   `sanctions_match(name=officer_name, threshold=0.5,
+   topics=["sanction"])` — are co-officers also sanctioned?
+   (up to 15 calls).
+5. Cross-reference jurisdictions: `icij_entity(node_id)` on
+   key entities to check secrecy jurisdiction presence
+   (up to 10 calls).
+
+**Hit**: Sanctioned person linked to offshore entity through
+0-3 intermediary hops. Severity = CRITICAL if direct link,
+HIGH if through intermediary.
+
+#### pep-opacity (budget: 80 calls)
+
+Find PEP family members hiding behind offshore structures.
+
+1. `sanctions_search(query="", topics=["role.rca"], limit=20)` —
+   get PEP family/close associates (1 call).
+2. For the top 10 `role.rca` entries with known `wikidataId`:
+   `wikidata_family(entity_id)` to get family member names
+   (up to 10 calls).
+3. For each family member name (up to 3 per PEP):
+   `icij_search(query=family_member_name)` (up to 20 calls).
+4. For each ICIJ hit: `icij_entity(node_id)` to get officer
+   list — check if the PEP name is ABSENT (up to 15 calls).
+5. For confirmed hits: `sanctions_entity(entity_id)` on the
+   PEP to get full sanctions/positions detail (up to 5 calls).
+
+**Hit**: PEP family member is an ICIJ officer AND the PEP's
+own name does not appear as officer on the same entities.
+Severity = HIGH.
+
+#### nominee-shield (budget: 60 calls)
+
+Find professional nominee directors serving on mass entities.
+
+1. `icij_search(query="nominee director")` +
+   `icij_search(query="nominee services")` +
+   `icij_search(query="corporate directors")` (3 calls).
+2. For each officer result (up to 10):
+   `icij_investigate(name=officer_name, max_results=10)` to
+   count directorships and list connected entities (up to 10 calls).
+3. For officers with 20+ directorships:
+   `icij_entity(node_id)` on a sample of their entities to
+   verify diversity of jurisdiction and investigation source
+   (up to 15 calls).
+4. `sanctions_batch_match(names=[high_degree_officers],
+   threshold=0.5)` — check if any nominees are themselves
+   flagged (1 call).
+
+**Hit**: Officer holding 20+ directorships across unrelated
+entities in different jurisdictions. Severity = HIGH if 50+,
+MEDIUM if 20+.
+
+#### intermediary-cluster (budget: 60 calls)
+
+Find formation agents managing large entity portfolios.
+
+1. Search for known agents:
+   `icij_search(query="Mossack Fonseca")` +
+   `icij_search(query="Appleby")` +
+   `icij_search(query="Asiaciti Trust")` +
+   `icij_search(query="Trident Trust")` (4 calls).
+2. For each intermediary found:
+   `icij_investigate(name=intermediary_name, max_results=10)` —
+   how many entities do they manage? (up to 10 calls).
+3. For high-volume intermediaries (20+ entities):
+   `icij_entity(node_id)` on a sample of managed entities
+   to profile jurisdictions and officer patterns (up to 20 calls).
+4. Check for sanctions connections among managed entities:
+   `sanctions_batch_match(names=[entity_officer_names],
+   threshold=0.5)` (up to 3 calls).
+
+**Hit**: Intermediary managing 20+ entities. Severity = HIGH
+if any managed entities have sanctioned officers, MEDIUM
+otherwise.
+
+#### rapid-dissolution (budget: 60 calls)
+
+Find short-lived UK companies with suspicious characteristics.
+
+1. `uk_search(query="dissolved", type="company",
+   items_per_page=10)` (1 call).
+2. For each result: `uk_company(company_number=number)` to get
+   incorporation/dissolution dates and officer info
+   (up to 15 calls).
+3. For short-lifespan companies (dissolved < 730 days after
+   incorporation): `uk_officer_appointments(officer_id)` to
+   check director nationality and other directorships
+   (up to 15 calls).
+4. `uk_filing_history(company_number=number)` to check for
+   missing/dormant accounts (up to 10 calls).
+5. Cross-check directors against sanctions:
+   `sanctions_match(name=director_name, threshold=0.5)`
+   (up to 5 calls).
+
+**Hit**: Entity dissolved within 2 years, foreign-only
+directors, no/dormant accounts. Severity = HIGH if directors
+are sanctioned, MEDIUM otherwise.
+
+#### llp-opacity (budget: 55 calls)
+
+Find UK LLPs with opaque corporate partners.
+
+1. `uk_search(query="LLP", type="company", items_per_page=10)`
+   (1 call).
+2. For each LLP: `uk_company(company_number=number)` to get
+   partner types and jurisdictions (up to 15 calls).
+3. For LLPs with corporate partners: check partner jurisdiction
+   codes against secrecy list (BZ, SC, MH, WS, PA, VG, KY) —
+   no extra calls, data analysis only.
+4. `uk_filing_history(company_number=number)` for dormant
+   accounts indicator (up to 10 calls).
+5. `beneficial_owner(company=company_number)` to check PSC
+   status (up to 10 calls).
+
+**Hit**: LLP with corporate partners in secrecy jurisdictions
+AND no UK individual partner. Severity = HIGH if dormant
+accounts also present, MEDIUM otherwise.
+
+#### beneficial-ownership-gap (budget: 55 calls)
+
+Find entities with no disclosed beneficial owner.
+
+1. `gleif_search(query="")` or search for entities found in
+   the investigation's network (up to 5 calls).
+2. For each entity: `gleif_ownership(lei=lei)` to trace
+   parent/UBO chain (up to 15 calls).
+3. For entities with corporate-only ownership (no natural
+   person in chain): `beneficial_owner(company=company_name)`
+   in Companies House (up to 10 calls).
+4. Cross-reference with ICIJ: `icij_search(query=entity_name)`
+   to check offshore presence (up to 10 calls).
+
+**Hit**: Entity with no disclosed natural-person beneficial
+owner after tracing through ownership chain. Severity = HIGH
+if also in ICIJ, MEDIUM if only in GLEIF/CH.
+
+#### mass-registration (budget: 50 calls)
+
+Find addresses hosting large numbers of registered entities.
+
+1. Search for known shell-mill indicators:
+   `icij_search(query="registered agent")` +
+   `icij_search(query="registered office")` (2 calls).
+2. For top address nodes in results:
+   `icij_entity(node_id)` to get full entity count
+   (up to 10 calls).
+3. For addresses with 10+ entities:
+   `icij_extend(node_ids=[address_ids],
+   properties=["countries"])` to profile jurisdictions
+   (up to 5 calls).
+4. UK cross-check: `uk_search(query=address_text,
+   type="company")` for UK-based addresses (up to 5 calls).
+
+**Hit**: Address hosting 10+ entities. Severity = CRITICAL
+if 100+, HIGH if 50+, MEDIUM if 10+.
+
+### `--scan all` budget allocation
+
+Run scans sequentially in this priority order:
+
+| Order | Scan type | Budget | Risk |
+|-------|-----------|--------|------|
+| 1 | sanctions-evasion | 80 | CRITICAL |
+| 2 | pep-opacity | 80 | HIGH |
+| 3 | nominee-shield | 60 | HIGH |
+| 4 | intermediary-cluster | 60 | HIGH |
+| 5 | rapid-dissolution | 60 | HIGH |
+| 6 | llp-opacity | 55 | HIGH |
+| 7 | beneficial-ownership-gap | 55 | HIGH |
+| 8 | mass-registration | 50 | MEDIUM |
+| | **Total** | **500** | |
+
+If a scan finishes under its budget, carry the remainder to the
+next scan in the sequence.
+
+### Scan report template
+
+For a single scan type:
+
+```
+## Scan report: [scan-type]
+
+Date: [YYYY-MM-DD]
+Budget: [used]/[allocated] calls
+
+### Executive summary
+
+[1-2 sentences: how many instances found, severity distribution]
+
+### Confirmed findings
+
+#### Finding 1: [entity/person name] — [CRITICAL/HIGH/MEDIUM]
+
+**Evidence**: [specific findings — names, node IDs, relationships]
+
+**Chain**:
+> [Person A] → *officer of* → [Entity B] (BVI)
+> → *intermediary* → [Firm C] (Panama)
+
+**Jurisdictions**: [list]
+**Pattern**: [pattern name from INDEX.yaml]
+**Confidence**: HIGH
+**Follow-up**: `/investigate [name] --trace`
+
+#### Finding 2: ...
+
+### Summary
+
+| Metric | Count |
+|--------|-------|
+| Seeds examined | [N] |
+| Findings confirmed | [N] |
+| CRITICAL | [N] |
+| HIGH | [N] |
+| MEDIUM | [N] |
+| API calls used | [N]/[budget] |
+
+### Standard caveats
+[Include standard caveats]
+```
+
+For `--scan all`:
+
+```
+## Comprehensive scan report
+
+Date: [YYYY-MM-DD]
+Budget: [used]/500 calls
+
+### Executive summary
+
+[Overall findings across all 8 scan types]
+
+### Results by scan type
+
+| Scan type | Findings | CRITICAL | HIGH | MEDIUM | Calls |
+|-----------|----------|----------|------|--------|-------|
+| sanctions-evasion | [N] | [N] | [N] | [N] | [N]/80 |
+| pep-opacity | [N] | [N] | [N] | [N] | [N]/80 |
+| nominee-shield | [N] | [N] | [N] | [N] | [N]/60 |
+| ... | | | | | |
+
+### Top findings (ranked by severity)
+
+[Top 10 findings across all scan types, ranked by severity
+then confidence. If an entity appears in multiple scans,
+note all matching patterns.]
+
+### Detailed findings per scan type
+
+#### sanctions-evasion
+[Finding list]
+
+#### pep-opacity
+[Finding list]
+
+...
+
+### Standard caveats
+[Include standard caveats]
+```
+
+### Scan visualization
+
+After the scan report, ask:
+"Would you like an interactive scan dashboard?"
+
+If yes, build the scan data structure:
+
+```python
+scan_data = {
+    "mode": "scan",
+    "scan_types": ["sanctions-evasion"],   # or list of all types run
+    "query": None,                          # None for standalone scan
+    "generated_at": "2026-04-11 14:30 UTC",
+    "budget": {"used": 312, "total": 500},
+    "findings": [
+        {
+            "id": "finding-1",
+            "scan_type": "sanctions-evasion",
+            "severity": "CRITICAL",
+            "confidence": "HIGH",
+            "title": "Ahmad Santos — OFAC SDN linked to BVI entity",
+            "summary": "Sanctioned person connected to offshore entity",
+            "entities": [
+                {"id": "os-NK-U8se...", "name": "Ahmad Santos",
+                 "type": "Person", "sanctioned": True},
+                {"id": "icij-10004476", "name": "SANTOS CMI LLP",
+                 "type": "Entity", "sanctioned": False}
+            ],
+            "chain": [
+                {"from": "Ahmad Santos", "rel": "officer_of",
+                 "to": "Santos CMI Construction"},
+                {"from": "Santos CMI Construction",
+                 "rel": "registered_at", "to": "UK"}
+            ],
+            "jurisdictions": ["PH", "GB"],
+            "pattern": "sanctions_evasion",
+            "follow_up": "/investigate Ahmad Santos --trace"
+        }
+    ],
+    "summary": {
+        "total_findings": 8,
+        "by_severity": {"CRITICAL": 2, "HIGH": 3, "MEDIUM": 3},
+        "by_scan_type": {"sanctions-evasion": 3, "pep-opacity": 2},
+        "jurisdictions_seen": ["GB", "BVI", "PA", "PH"],
+        "calls_by_scan": {"sanctions-evasion": 72, "pep-opacity": 65}
+    }
+}
+```
+
+Pass this to `generate_visualization(scan_data, slug="scan-...",
+open_browser=True)`. The visualizer detects `mode: "scan"` and
+renders a scan dashboard instead of a network graph.
+
+For combined mode (`<name> --scan <type>`), the scan findings are
+added as a `"scan_findings"` key in the normal investigation data.
+The visualizer renders the standard investigation graph plus a
+"Scan Findings" tab.
+
+---
+
 ## Standard caveats (include in all reports)
 
 - Appearing in the ICIJ database does not indicate illegality
@@ -497,7 +1080,11 @@ prominently:]
 ## Notes
 
 - The `deep_trace` tool handles cross-source bridging automatically
-- Budget parameter prevents runaway API calls — increase for thorough work
+- Total budget is 500 API calls across all phases
 - High-connectivity nodes (>25 connections) are auto-pruned
 - For ongoing tracking after any investigation, suggest `/investigate <name> --monitor`
 - When a new pattern is found, propose adding it to `patterns/INDEX.yaml`
+- Pattern probes (Step 3) are conditional — they only fire when
+  relevant signals are present in Step 1-2 results
+- Scan mode operates without a target name — it uses hardcoded
+  search strategies to hunt for structural patterns

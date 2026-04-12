@@ -823,6 +823,627 @@
 // ============================================================
 // __PORTABLE_DATA_INLINE__
 const data = (typeof SIFT_DATA !== 'undefined') ? SIFT_DATA : {};
+
+// ============================================================
+// SCAN MODE — findings dashboard (completely different layout)
+// ============================================================
+if (data.mode === 'scan') {
+  (function renderScanDashboard() {
+    const findings = data.findings || [];
+    const summary = data.summary || {};
+    const meta = data.metadata || {};
+    const scanTypes = meta.scan_types || [];
+    const bySeverity = summary.by_severity || {};
+    const byScanType = summary.by_scan_type || {};
+    const sevRaw = { CRITICAL: '#f85149', HIGH: '#d29922', MEDIUM: '#58a6ff' };
+    const sevOrder = ['CRITICAL', 'HIGH', 'MEDIUM'];
+    const sevTooltip = {
+      CRITICAL: 'Requires immediate action. Direct sanctions exposure, active designations, or confirmed illegal structures.',
+      HIGH: 'Requires enhanced due diligence. Strong pattern evidence, PEP connections, or indirect sanctions links.',
+      MEDIUM: 'Warrants further investigation. Structural indicators present but no direct sanctions or PEP exposure confirmed.'
+    };
+    const patternDescriptions = {
+      sanctions_evasion: 'Offshore structure connected to a sanctioned person within 3 hops. Indicates potential circumvention of international sanctions through shell companies or intermediaries.',
+      pep_opacity_layer: 'Politically exposed person\'s family members or associates hold offshore positions while the PEP\'s own name is absent. Classic concealment technique.',
+      nominee_shield: 'Professional nominee directors serving on 20+ unrelated entities. Used to obscure true ownership by interposing professional names.',
+      intermediary_cluster: 'Single formation agent managing a large portfolio of offshore entities. High-volume intermediaries facilitate rapid entity creation.',
+      mass_registration: 'Address hosting an unusually high number of registered entities. Often indicates a shell company mill or virtual office service.',
+      rapid_dissolution: 'Company dissolved within 2 years of incorporation with foreign-only directors and no filed accounts. Hallmark of a single-use shell.',
+      llp_opacity_vehicle: 'UK LLP with corporate partners in secrecy jurisdictions and no UK individual partner. Exploits LLP transparency gaps.',
+      beneficial_ownership_gap: 'Entity with no disclosed natural-person beneficial owner after tracing the ownership chain. May indicate deliberate opacity.'
+    };
+
+    // Hide all investigation-mode HTML
+    document.querySelectorAll('.header, .exec-summary, .tab-bar, .tab-content, .tooltip').forEach(function(el) { el.style.display = 'none'; });
+    var invFooter = document.querySelector('div[style*="border-top"][style*="Sources:"]');
+    if (invFooter) invFooter.style.display = 'none';
+
+    // Build scan dashboard in a new container
+    const root = document.createElement('div');
+    root.style.cssText = 'max-width:1100px; margin:0 auto; padding:0;';
+    root.id = 'scanRoot';
+    document.body.appendChild(root);
+    console.log('[Sift Scan] Dashboard root appended, findings:', findings.length);
+
+    // Shared tooltip element (created AFTER hiding investigation tooltips)
+    const tip = document.createElement('div');
+    tip.className = 'tooltip';
+    tip.id = 'scanTooltip';
+    tip.style.maxWidth = '340px';
+    document.body.appendChild(tip);
+    function showTip(evt, html) {
+      tip.innerHTML = html;
+      tip.classList.add('visible');
+      tip.style.left = Math.min(evt.clientX + 14, window.innerWidth - 360) + 'px';
+      tip.style.top = Math.max(0, evt.clientY - 14 - tip.offsetHeight) + 'px';
+    }
+    function hideTip() { tip.classList.remove('visible'); }
+
+    // === HEADER (reuse .header class) ===
+    const scanLabel = scanTypes.length === 1 && scanTypes[0] !== 'all'
+      ? scanTypes[0] : (scanTypes.includes('all') ? 'Comprehensive Scan' : scanTypes.join(', '));
+    document.title = 'Sift Scan Report — ' + (scanLabel || 'Scan');
+    const hdr = document.createElement('div');
+    hdr.className = 'header';
+    hdr.innerHTML =
+      '<h1>Sift Scan Report <span>' + scanLabel + '</span></h1>' +
+      '<div class="header-controls">' +
+        '<span style="font-size:12px;color:var(--text-muted)">' + (meta.generated_at || '') + '</span>' +
+      '</div>';
+    root.appendChild(hdr);
+
+    // === EXECUTIVE SUMMARY (reuse .exec-summary) ===
+    const exec = document.createElement('div');
+    exec.className = 'exec-summary';
+
+    // Summary cards row
+    const grid = document.createElement('div');
+    grid.className = 'summary-grid';
+
+    // Severity cards with tooltips
+    sevOrder.forEach(function(sev) {
+      const count = bySeverity[sev] || 0;
+      if (!count) return;
+      const cls = sev === 'CRITICAL' ? 'critical' : (sev === 'HIGH' ? 'warning' : 'info');
+      const card = document.createElement('div');
+      card.className = 'summary-card ' + cls;
+      card.setAttribute('data-tooltip', '1');
+      card.innerHTML =
+        '<div class="card-label">' + sev + '</div>' +
+        '<div class="card-value" style="color:' + sevRaw[sev] + '">' + count + '</div>' +
+        '<div class="card-detail">' + count + ' finding' + (count !== 1 ? 's' : '') + ' at ' + sev.toLowerCase() + ' severity</div>' +
+        '<div class="card-tooltip">' + sevTooltip[sev] + '</div>';
+      grid.appendChild(card);
+    });
+
+    // Total card
+    var totalEl = document.createElement('div');
+    totalEl.className = 'summary-card';
+    totalEl.setAttribute('data-tooltip', '1');
+    totalEl.innerHTML =
+      '<div class="card-label">Total Findings</div>' +
+      '<div class="card-value">' + (summary.total_findings || findings.length) + '</div>' +
+      '<div class="card-detail">Across ' + Object.keys(byScanType).length + ' scan type' + (Object.keys(byScanType).length !== 1 ? 's' : '') + '</div>' +
+      '<div class="card-tooltip">Total confirmed pattern instances found during this scan. Each finding represents a specific entity or structure matching a known risk pattern.</div>';
+    grid.appendChild(totalEl);
+
+    // Jurisdictions card
+    var jurs = summary.jurisdictions_seen || [];
+    if (jurs.length) {
+      var jurCard = document.createElement('div');
+      jurCard.className = 'summary-card';
+      jurCard.setAttribute('data-tooltip', '1');
+      jurCard.innerHTML =
+        '<div class="card-label">Jurisdictions</div>' +
+        '<div class="card-value">' + jurs.length + '</div>' +
+        '<div class="card-detail">' + jurs.slice(0, 5).join(', ') + (jurs.length > 5 ? ' +' + (jurs.length - 5) + ' more' : '') + '</div>' +
+        '<div class="card-tooltip">Distinct jurisdictions observed across all findings. High-secrecy jurisdictions (BVI, Panama, Cayman, Seychelles) indicate elevated risk.</div>';
+      grid.appendChild(jurCard);
+    }
+
+    exec.appendChild(grid);
+
+    // === INTELLIGENCE ASSESSMENT ===
+    var assessment = document.createElement('div');
+    assessment.className = 'findings-narrative';
+    var assessmentHtml = '';
+
+    // Use the provided assessment text if available, otherwise generate one
+    if (summary.assessment) {
+      assessmentHtml = summary.assessment;
+    } else {
+      var critCount = bySeverity['CRITICAL'] || 0;
+      var highCount = bySeverity['HIGH'] || 0;
+      var totalFindings = summary.total_findings || findings.length;
+
+      // Overall risk determination
+      var overallRisk = critCount ? 'CRITICAL' : (highCount ? 'HIGH' : 'MEDIUM');
+      assessmentHtml += '<div style="margin-bottom:12px"><strong style="color:' + sevRaw[overallRisk] + '">Overall risk assessment: ' + overallRisk + '</strong></div>';
+
+      // Key findings narrative
+      assessmentHtml += '<p>This scan identified <strong>' + totalFindings + ' confirmed pattern instance' + (totalFindings !== 1 ? 's' : '') + '</strong> across ' + Object.keys(byScanType).length + ' scan type' + (Object.keys(byScanType).length !== 1 ? 's' : '') + '. ';
+
+      if (critCount) {
+        // Extract critical finding names for the narrative
+        var critFindings = findings.filter(function(f) { return f.severity === 'CRITICAL'; });
+        assessmentHtml += '<span class="flag-sanction">' + critCount + ' critical finding' + (critCount !== 1 ? 's' : '') + '</span> require immediate attention';
+        if (critFindings.length <= 3) {
+          assessmentHtml += ': ' + critFindings.map(function(f) { return '<strong>' + (f.title || '').split(' — ')[0] + '</strong>'; }).join(', ');
+        }
+        assessmentHtml += '. ';
+      }
+      if (highCount) {
+        assessmentHtml += '<span class="flag-pep">' + highCount + ' high-severity finding' + (highCount !== 1 ? 's' : '') + '</span> warrant enhanced due diligence. ';
+      }
+      assessmentHtml += '</p>';
+
+      // Jurisdictional significance
+      var secrecyJurs = (jurs || []).filter(function(j) { return ['VG', 'PA', 'KY', 'SC', 'BZ', 'WS', 'MH', 'KN', 'JE', 'GG', 'IM'].indexOf(j) >= 0; });
+      if (secrecyJurs.length) {
+        assessmentHtml += '<p>' + secrecyJurs.length + ' high-secrecy jurisdiction' + (secrecyJurs.length !== 1 ? 's' : '') + ' identified: <strong>' + secrecyJurs.join(', ') + '</strong>. These jurisdictions rank highly on financial secrecy indices and are commonly used in layered offshore structures to obscure beneficial ownership.</p>';
+      }
+
+      // Pattern significance
+      var patternTypes = {};
+      findings.forEach(function(f) { if (f.pattern) patternTypes[f.pattern] = (patternTypes[f.pattern] || 0) + 1; });
+      var patEntries = Object.entries(patternTypes).sort(function(a, b) { return b[1] - a[1]; });
+      if (patEntries.length) {
+        assessmentHtml += '<p>Patterns detected: ';
+        assessmentHtml += patEntries.map(function(e) {
+          var desc = patternDescriptions[e[0]] || '';
+          return '<strong>' + e[0].replace(/_/g, ' ') + '</strong> (' + e[1] + ')' + (desc ? ' &mdash; <em style="color:var(--text-muted)">' + desc.split('.')[0] + '.</em>' : '');
+        }).join(' ');
+        assessmentHtml += '</p>';
+      }
+    }
+    assessment.innerHTML = assessmentHtml;
+    exec.appendChild(assessment);
+    root.appendChild(exec);
+
+    // === FINDINGS ===
+    const findingsContainer = document.createElement('div');
+    findingsContainer.style.cssText = 'padding:20px 24px;display:flex;flex-direction:column;gap:16px;';
+    root.appendChild(findingsContainer);
+
+    // Section header
+    var findingsHdr = document.createElement('h3');
+    findingsHdr.style.cssText = 'font-size:15px;font-weight:600;color:var(--text);margin:0 0 4px;';
+    findingsHdr.textContent = 'Confirmed Findings';
+    findingsContainer.appendChild(findingsHdr);
+
+    function esc(s) { return (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    function buildFindingCard(f, idx) {
+      var card = document.createElement('div');
+      card.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;border-left:4px solid ' + (sevRaw[f.severity] || 'var(--border)') + ';overflow:hidden;';
+
+      // --- Card header ---
+      var hdr = document.createElement('div');
+      hdr.style.cssText = 'padding:14px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;';
+      hdr.innerHTML =
+        '<span style="background:' + (sevRaw[f.severity] || '#8b949e') + ';color:var(--bg);padding:2px 10px;border-radius:3px;font-size:11px;font-weight:700;letter-spacing:0.3px;flex-shrink:0">' + esc(f.severity || 'MEDIUM') + '</span>' +
+        '<span style="font-size:14px;font-weight:600;color:var(--text);flex:1">' + esc(f.title || 'Finding ' + (idx + 1)) + '</span>' +
+        '<span class="scan-expand-arrow" style="color:var(--text-muted);font-size:12px;transition:transform 0.2s">&#9660;</span>';
+      card.appendChild(hdr);
+
+      // --- Card body (collapsible) ---
+      var body = document.createElement('div');
+      body.style.cssText = 'padding:0 18px 16px;';
+
+      // Toggle expand/collapse
+      var expanded = true;
+      hdr.addEventListener('click', function() {
+        expanded = !expanded;
+        body.style.display = expanded ? '' : 'none';
+        hdr.querySelector('.scan-expand-arrow').style.transform = expanded ? '' : 'rotate(-90deg)';
+      });
+
+      // Summary text
+      if (f.summary) {
+        var sum = document.createElement('div');
+        sum.style.cssText = 'font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:14px;';
+        sum.textContent = f.summary;
+        body.appendChild(sum);
+      }
+
+      // --- Two-column layout: mini-graph + entity details ---
+      var cols = document.createElement('div');
+      cols.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;';
+
+      // LEFT: Mini-graph
+      var miniNodes = f._mini_nodes || [];
+      var miniEdges = f._mini_edges || [];
+      var graphDiv = document.createElement('div');
+      graphDiv.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:6px;overflow:hidden;min-height:170px;position:relative;';
+
+      if (miniNodes.length > 0 && typeof d3 !== 'undefined') {
+        var width = 440, height = 170;
+        var svg = d3.select(graphDiv).append('svg')
+          .attr('width', '100%').attr('height', height)
+          .attr('viewBox', '0 0 ' + width + ' ' + height);
+
+        var sim = d3.forceSimulation(miniNodes)
+          .force('link', d3.forceLink(miniEdges).id(function(d) { return d.id; }).distance(120))
+          .force('charge', d3.forceManyBody().strength(-250))
+          .force('center', d3.forceCenter(width / 2, height / 2))
+          .force('y', d3.forceY(height / 2).strength(0.15))
+          .force('collision', d3.forceCollide(30));
+
+        // Edge lines
+        var link = svg.append('g').selectAll('line')
+          .data(miniEdges).enter().append('line')
+          .attr('stroke', 'var(--edge-color)').attr('stroke-width', 1.5)
+          .attr('stroke-dasharray', function(d) { return d.relationship === 'cross-reference' ? '4,3' : 'none'; });
+
+        // Edge labels
+        var linkLabel = svg.append('g').selectAll('text')
+          .data(miniEdges).enter().append('text')
+          .text(function(d) { return (d.relationship || '').replace(/_/g, ' '); })
+          .attr('font-size', '9px').attr('fill', 'var(--text-dim)')
+          .attr('text-anchor', 'middle');
+
+        // Nodes with tooltips
+        var node = svg.append('g').selectAll('circle')
+          .data(miniNodes).enter().append('circle')
+          .attr('r', function(d) { return d.sanctioned ? 10 : (d.pep ? 9 : 8); })
+          .attr('fill', function(d) {
+            if (d.sanctioned) return 'var(--sanction-color)';
+            if (d.pep) return 'var(--pep-color)';
+            if (d.type === 'Intermediary') return 'var(--os-color)';
+            if (d.type === 'Entity' || d.type === 'Company') return 'var(--icij-color)';
+            return 'var(--both-color)';
+          })
+          .attr('stroke', 'var(--bg)').attr('stroke-width', 2)
+          .style('cursor', 'grab')
+          .call(d3.drag()
+            .on('start', function(evt, d) {
+              if (!evt.active) sim.alphaTarget(0.3).restart();
+              d.fx = d.x; d.fy = d.y;
+              d3.select(this).style('cursor', 'grabbing');
+            })
+            .on('drag', function(evt, d) {
+              d.fx = evt.x; d.fy = evt.y;
+              hideTip();
+            })
+            .on('end', function(evt, d) {
+              if (!evt.active) sim.alphaTarget(0);
+              d.fx = null; d.fy = null;
+              d3.select(this).style('cursor', 'grab');
+            })
+          );
+
+        // Dataset human-readable names
+        var dsNames = {
+          us_ofac_sdn: 'OFAC SDN (US Treasury)',
+          un_sc_sanctions: 'UN Security Council',
+          gb_fcdo_sanctions: 'UK FCDO Sanctions',
+          eu_fsf: 'EU Financial Sanctions',
+          gb_coh_disqualified: 'UK Disqualified Directors',
+          us_klepto_hr_visa: 'US Kleptocracy Visa Ban',
+          wd_peps: 'Wikidata PEPs',
+          wd_curated: 'Wikidata Curated',
+          wikidata: 'Wikidata',
+          everypolitician: 'EveryPolitician',
+          ann_pep_positions: 'PEP Position Annotations',
+          br_pep: 'Brazil PEPs',
+          au_dfat_sanctions: 'Australia DFAT Sanctions',
+          ch_seco_sanctions: 'Swiss SECO Sanctions',
+          fr_tresor_gels_avoir: 'France Asset Freezes',
+          us_sam_exclusions: 'US SAM Exclusions',
+          us_trade_csl: 'US Trade CSL',
+          ann_graph_topics: 'Graph Topic Annotations',
+          wd_categories: 'Wikidata Categories'
+        };
+        function dsLabel(ds) { return dsNames[ds] || ds; }
+
+        node.on('mouseover', function(evt, d) {
+          d3.select(this).attr('r', function(d) { return (d.sanctioned ? 10 : (d.pep ? 9 : 8)) + 3; });
+          var html = '';
+          // Header with name and type
+          html += '<div style="font-weight:600;font-size:13px;margin-bottom:2px;color:var(--text)">' + esc(d.label || d.name) + '</div>';
+          html += '<div style="font-size:10px;color:var(--text-dim);margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid var(--border)">' + esc(d.type || 'Unknown');
+          if (d.jurisdiction) html += ' &middot; ' + esc(d.jurisdiction);
+          if (d.investigation) html += ' &middot; ' + esc(d.investigation);
+          html += '</div>';
+
+          // Flags row
+          var flags = [];
+          if (d.sanctioned) flags.push('<span style="color:var(--sanction-color);font-weight:600;font-size:10px;background:rgba(248,81,73,0.15);padding:1px 6px;border-radius:3px">SANCTIONED</span>');
+          if (d.pep) flags.push('<span style="color:var(--pep-color);font-weight:600;font-size:10px;background:rgba(210,153,34,0.15);padding:1px 6px;border-radius:3px">PEP</span>');
+          if (d.topics && d.topics.indexOf('role.rca') >= 0) flags.push('<span style="color:var(--rca-color);font-weight:600;font-size:10px;background:rgba(219,97,162,0.15);padding:1px 6px;border-radius:3px">CLOSE ASSOCIATE</span>');
+          if (d.topics && d.topics.indexOf('debarment') >= 0) flags.push('<span style="color:#f97583;font-weight:600;font-size:10px;background:rgba(249,117,131,0.15);padding:1px 6px;border-radius:3px">DEBARRED</span>');
+          if (flags.length) html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">' + flags.join('') + '</div>';
+
+          // Person details section
+          var personFields = [];
+          if (d.position) personFields.push('<strong>Position:</strong> ' + esc(typeof d.position === 'object' ? d.position.join('; ') : d.position));
+          if (d.birth_date) personFields.push('<strong>Born:</strong> ' + esc(d.birth_date) + (d.birth_place ? ', ' + esc(d.birth_place) : ''));
+          if (d.country_codes && d.country_codes.length) personFields.push('<strong>Nationality:</strong> ' + d.country_codes.join(', '));
+          if (d.citizenship && d.citizenship.length) personFields.push('<strong>Citizenship:</strong> ' + (Array.isArray(d.citizenship) ? d.citizenship.join(', ') : esc(d.citizenship)));
+          if (personFields.length) html += '<div style="font-size:11px;color:var(--text-muted);line-height:1.6;margin-bottom:6px">' + personFields.join('<br>') + '</div>';
+
+          // Entity details section
+          var entityFields = [];
+          if (d.incorporation_date) entityFields.push('<strong>Incorporated:</strong> ' + esc(d.incorporation_date));
+          if (d.status) entityFields.push('<strong>Status:</strong> ' + esc(d.status));
+          if (d.company_number) entityFields.push('<strong>Company #:</strong> ' + esc(d.company_number));
+          if (entityFields.length) html += '<div style="font-size:11px;color:var(--text-muted);line-height:1.6;margin-bottom:6px">' + entityFields.join('<br>') + '</div>';
+
+          // Topics with color coding
+          if (d.topics && d.topics.length) {
+            html += '<div style="font-size:10px;margin-bottom:4px"><strong style="color:var(--text-muted)">Topics: </strong>';
+            html += d.topics.map(function(t) {
+              var c = t.indexOf('sanction') >= 0 ? 'var(--sanction-color)' : (t.indexOf('pep') >= 0 || t.indexOf('rca') >= 0 ? 'var(--pep-color)' : (t.indexOf('crime') >= 0 ? '#f97583' : (t.indexOf('debarment') >= 0 ? '#f97583' : 'var(--text-dim)')));
+              return '<span style="color:' + c + '">' + esc(t) + '</span>';
+            }).join(', ') + '</div>';
+          }
+
+          // Aliases (show up to 5)
+          if (d.aliases && d.aliases.length) {
+            var shown = d.aliases.slice(0, 5).map(esc).join(', ');
+            var more = d.aliases.length > 5 ? ' <span style="color:var(--text-dim)">+' + (d.aliases.length - 5) + ' more</span>' : '';
+            html += '<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px"><strong>Also known as:</strong> ' + shown + more + '</div>';
+          }
+
+          // Datasets with human-readable names
+          if (d.datasets && d.datasets.length) {
+            html += '<div style="font-size:10px;margin-bottom:4px;padding-top:4px;border-top:1px solid var(--border)"><strong style="color:var(--text-muted)">Listed on:</strong><br>';
+            html += d.datasets.map(function(ds) {
+              var label = dsLabel(ds);
+              var isSanction = ds.indexOf('sanction') >= 0 || ds.indexOf('ofac') >= 0 || ds.indexOf('fcdo') >= 0 || ds.indexOf('seco') >= 0 || ds.indexOf('dfat') >= 0;
+              return '<span style="color:' + (isSanction ? 'var(--sanction-color)' : 'var(--text-dim)') + '">' + esc(label) + '</span>';
+            }).join(', ') + '</div>';
+          }
+
+          // Notes
+          if (d.notes) {
+            var noteText = typeof d.notes === 'string' ? d.notes : (Array.isArray(d.notes) ? d.notes[0] : '');
+            if (noteText) html += '<div style="font-size:10px;color:var(--text-muted);font-style:italic;margin-top:4px;padding-top:4px;border-top:1px solid var(--border)">' + esc(noteText) + '</div>';
+          }
+
+          showTip(evt, html);
+        }).on('mousemove', function(evt) {
+          tip.style.left = Math.min(evt.clientX + 14, window.innerWidth - 360) + 'px';
+          tip.style.top = Math.max(0, evt.clientY - 14 - tip.offsetHeight) + 'px';
+        }).on('mouseout', function(evt, d) {
+          d3.select(this).attr('r', d.sanctioned ? 10 : (d.pep ? 9 : 8));
+          hideTip();
+        });
+
+        // Node labels
+        var label = svg.append('g').selectAll('text')
+          .data(miniNodes).enter().append('text')
+          .text(function(d) { var l = d.label || ''; return l.length > 22 ? l.substring(0, 20) + '..' : l; })
+          .attr('font-size', '10px').attr('fill', 'var(--text)')
+          .attr('text-anchor', 'middle').attr('dy', -16)
+          .style('pointer-events', 'none');
+
+        sim.on('tick', function() {
+          link.attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; })
+              .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
+          linkLabel.attr('x', function(d) { return (d.source.x + d.target.x) / 2; })
+                   .attr('y', function(d) { return (d.source.y + d.target.y) / 2 - 5; });
+          node.attr('cx', function(d) { return d.x = Math.max(16, Math.min(width - 16, d.x)); })
+              .attr('cy', function(d) { return d.y = Math.max(16, Math.min(height - 16, d.y)); });
+          label.attr('x', function(d) { return d.x; }).attr('y', function(d) { return d.y; });
+        });
+        // Let simulation settle but keep it alive for drag interaction
+        sim.alphaDecay(0.05);
+      } else if (f.chain && f.chain.length) {
+        // Chain text fallback
+        graphDiv.style.padding = '12px';
+        graphDiv.style.fontFamily = 'monospace';
+        graphDiv.style.fontSize = '12px';
+        graphDiv.style.minHeight = 'auto';
+        graphDiv.innerHTML = f.chain.map(function(c) {
+          return '<span style="color:var(--text)">' + esc(c.from) + '</span> <span style="color:var(--text-dim)">&mdash;' + esc(c.rel || 'linked') + '&rarr;</span> <span style="color:var(--text)">' + esc(c.to) + '</span>';
+        }).join('<br>');
+      }
+      cols.appendChild(graphDiv);
+
+      // RIGHT: Entity details + risk factors
+      var detailDiv = document.createElement('div');
+      detailDiv.style.cssText = 'display:flex;flex-direction:column;gap:10px;';
+
+      // Entity table
+      var entities = f.entities || [];
+      if (entities.length) {
+        var entSection = document.createElement('div');
+        entSection.innerHTML = '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px">Entities involved</div>';
+        var entTable = '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+        entities.forEach(function(e) {
+          var flagHtml = '';
+          if (e.sanctioned) flagHtml += '<span style="color:var(--sanction-color);font-weight:600;font-size:10px;background:rgba(248,81,73,0.1);padding:1px 5px;border-radius:2px">SANCTIONED</span> ';
+          if (e.pep) flagHtml += '<span style="color:var(--pep-color);font-weight:600;font-size:10px;background:rgba(210,153,34,0.1);padding:1px 5px;border-radius:2px">PEP</span> ';
+          var topicHtml = '';
+          if (e.topics && e.topics.length) topicHtml = '<div style="font-size:10px;color:var(--text-dim)">' + e.topics.join(', ') + '</div>';
+          var srcHtml = '';
+          if (e.datasets && e.datasets.length) srcHtml = '<div style="font-size:10px;color:var(--text-dim)">' + e.datasets.slice(0, 3).join(', ') + (e.datasets.length > 3 ? ' +' + (e.datasets.length - 3) : '') + '</div>';
+          entTable += '<tr style="border-bottom:1px solid var(--border)">' +
+            '<td style="padding:6px 4px;vertical-align:top"><div style="font-weight:500;color:var(--text)">' + esc(e.name) + '</div>' + topicHtml + srcHtml + '</td>' +
+            '<td style="padding:6px 4px;vertical-align:top;text-align:right;white-space:nowrap">' +
+              '<span style="font-size:10px;color:var(--text-dim)">' + esc(e.type || '') + '</span><br>' + flagHtml +
+              (e.jurisdiction ? '<span style="font-size:10px;color:var(--text-dim)">' + esc(e.jurisdiction) + '</span>' : '') +
+              (e.country_codes && e.country_codes.length ? '<span style="font-size:10px;color:var(--text-dim)"> ' + e.country_codes.join(', ') + '</span>' : '') +
+            '</td></tr>';
+        });
+        entTable += '</table>';
+        entSection.innerHTML += entTable;
+        detailDiv.appendChild(entSection);
+      }
+
+      // Risk factors with contextual tooltips
+      var risks = f.risk_factors || [];
+      if (risks.length) {
+        var riskSection = document.createElement('div');
+        riskSection.innerHTML = '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px">Risk indicators</div>';
+        var riskContext = {
+          'OFAC SDN designated': 'Listed on the US Office of Foreign Assets Control Specially Designated Nationals list. US persons are prohibited from transacting with SDN-listed entities. Violations carry severe civil and criminal penalties.',
+          'UN Security Council listed': 'Subject to UN Security Council sanctions, binding on all UN member states. Requires asset freeze and travel ban implementation globally.',
+          'UK FCDO sanctions': 'Listed under UK Foreign, Commonwealth & Development Office sanctions. Triggers asset freeze, travel ban, and director disqualification in the UK.',
+          'EU consolidated financial sanctions': 'Listed on the EU Consolidated Financial Sanctions list. All EU persons and entities must freeze assets and refrain from making funds available.',
+          'Terror finance connection': 'Connected to designated terrorist financing networks. Triggers enhanced scrutiny under FATF Recommendation 6 and national counter-terrorism financing regimes.',
+          'Panama Papers entity': 'Entity appears in the Panama Papers leak (2016), sourced from Mossack Fonseca documents. The leak exposed 214,000+ offshore entities.',
+          'Paradise Papers source': 'Entity appears in the Paradise Papers leak (2017), sourced from Appleby and Asiaciti Trust documents.',
+          'Offshore Leaks source data': 'Entity appears in the original ICIJ Offshore Leaks (2013), the first major offshore data release.',
+          'Daughter of head of state': 'Close family member of a head of state, classified as a Relative or Close Associate (RCA) under PEP screening requirements. Requires enhanced due diligence under FATF Recommendation 12.',
+          'PEP name absent from records': 'The politically exposed person\'s own name does not appear on entity records, while family members do. This is a hallmark of the PEP opacity layer pattern — using family as proxies to distance the PEP from offshore holdings.',
+          'Multiple secrecy jurisdictions': 'Entities span multiple jurisdictions ranked highly on the Financial Secrecy Index. Multi-jurisdictional layering complicates beneficial ownership identification and regulatory enforcement.',
+          'BVI entities': 'British Virgin Islands — ranked among the top financial secrecy jurisdictions. BVI companies have minimal public disclosure requirements and no requirement to file accounts.',
+          'Founders indicted': 'The founders or principals of this entity have been indicted on criminal charges, indicating law enforcement has identified evidence of illegal activity.',
+          'Firm dissolved after leak': 'The entity was dissolved following public exposure through a data leak, suggesting the structure could not withstand scrutiny.',
+          'Convicted arms trafficker': 'Subject has been convicted of arms trafficking, a serious criminal offense under international law.',
+          'Cayman Islands entity': 'Cayman Islands — a leading offshore financial center with strong secrecy protections and no direct taxation.',
+          'Russian oligarch': 'Identified as a Russian oligarch — wealthy individuals with close ties to Russian state power. Subject to heightened sanctions scrutiny since 2014 (Crimea annexation) and 2022 (Ukraine invasion).',
+          'Indirect connection': 'The link is indirect, passing through one or more intermediary entities. Indirect connections may indicate deliberate layering to obscure relationships.',
+        };
+        risks.forEach(function(r) {
+          var riskDiv = document.createElement('div');
+          riskDiv.style.cssText = 'font-size:12px;color:var(--text);padding:4px 0;display:flex;align-items:baseline;gap:6px;cursor:help;border-radius:3px;';
+          riskDiv.innerHTML = '<span style="color:' + (sevRaw[f.severity] || 'var(--text-dim)') + ';font-size:8px;flex-shrink:0">&#9679;</span> ' + esc(r);
+          // Find matching context (partial match)
+          var ctx = '';
+          Object.keys(riskContext).forEach(function(key) {
+            if (r.toLowerCase().indexOf(key.toLowerCase()) >= 0 || key.toLowerCase().indexOf(r.toLowerCase().substring(0, 15)) >= 0) {
+              ctx = riskContext[key];
+            }
+          });
+          if (ctx) {
+            riskDiv.addEventListener('mouseover', function(evt) {
+              showTip(evt, '<div style="font-weight:600;margin-bottom:4px">' + esc(r) + '</div><div style="font-size:11px;color:var(--text-muted);line-height:1.5">' + esc(ctx) + '</div>');
+            });
+            riskDiv.addEventListener('mousemove', function(evt) {
+              tip.style.left = Math.min(evt.pageX + 14, window.innerWidth - 360) + 'px';
+              tip.style.top = (evt.pageY + 14) + 'px';
+            });
+            riskDiv.addEventListener('mouseout', hideTip);
+          }
+          riskSection.appendChild(riskDiv);
+        });
+        detailDiv.appendChild(riskSection);
+      }
+
+      cols.appendChild(detailDiv);
+      body.appendChild(cols);
+
+      // --- Pattern + metadata footer ---
+      var metaFooter = document.createElement('div');
+      metaFooter.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border);';
+
+      // Pattern badge with tooltip
+      if (f.pattern) {
+        var patBadge = document.createElement('span');
+        patBadge.style.cssText = 'font-size:11px;background:var(--bg);padding:3px 10px;border-radius:4px;border:1px solid var(--border);color:var(--text);cursor:help;';
+        patBadge.textContent = (f.pattern || '').replace(/_/g, ' ');
+        var desc = f.pattern_description || patternDescriptions[(f.pattern || '').replace(/-/g, '_')] || '';
+        if (desc) patBadge.title = desc;
+        patBadge.addEventListener('mouseover', function(evt) { if (desc) showTip(evt, '<div style="font-weight:600;margin-bottom:3px">' + esc(f.pattern.replace(/_/g, ' ')) + '</div><div style="font-size:11px;color:var(--text-muted);line-height:1.5">' + esc(desc) + '</div>'); });
+        patBadge.addEventListener('mouseout', hideTip);
+        metaFooter.appendChild(patBadge);
+      }
+
+      // Confidence badge
+      if (f.confidence) {
+        var confBadge = document.createElement('span');
+        var confColor = f.confidence === 'HIGH' ? 'var(--accent-green)' : (f.confidence === 'MEDIUM' ? 'var(--pep-color)' : 'var(--text-muted)');
+        confBadge.style.cssText = 'font-size:11px;color:' + confColor + ';cursor:help;';
+        confBadge.textContent = 'Confidence: ' + f.confidence;
+        confBadge.title = f.confidence === 'HIGH' ? 'Multiple independent signals confirm this pattern. Probe verification successful.' : (f.confidence === 'MEDIUM' ? 'Pattern indicators present but not fully verified by targeted probes.' : 'Weak signal. May be coincidental. Further investigation recommended.');
+        metaFooter.appendChild(confBadge);
+      }
+
+      // Scan type
+      if (f.scan_type) {
+        var stSpan = document.createElement('span');
+        stSpan.style.cssText = 'font-size:11px;color:var(--text-dim);';
+        stSpan.textContent = 'Scan: ' + f.scan_type;
+        metaFooter.appendChild(stSpan);
+      }
+
+      // Jurisdictions
+      if (f.jurisdictions && f.jurisdictions.length) {
+        var jurSpan = document.createElement('span');
+        jurSpan.style.cssText = 'font-size:11px;color:var(--text-dim);';
+        jurSpan.textContent = 'Jurisdictions: ' + f.jurisdictions.join(', ');
+        metaFooter.appendChild(jurSpan);
+      }
+
+      // Follow-up command
+      if (f.follow_up) {
+        var followUp = document.createElement('span');
+        followUp.style.cssText = 'margin-left:auto;font-size:11px;font-family:monospace;background:var(--bg);padding:3px 10px;border-radius:4px;color:var(--icij-color);cursor:pointer;border:1px solid var(--border);';
+        followUp.textContent = f.follow_up;
+        followUp.title = 'Click to copy command';
+        followUp.addEventListener('click', function(e) {
+          e.stopPropagation();
+          navigator.clipboard.writeText(f.follow_up).then(function() {
+            followUp.style.color = 'var(--accent-green)';
+            followUp.style.borderColor = 'var(--accent-green)';
+            followUp.textContent = 'Copied!';
+            setTimeout(function() { followUp.style.color = 'var(--icij-color)'; followUp.style.borderColor = 'var(--border)'; followUp.textContent = f.follow_up; }, 1500);
+          });
+        });
+        metaFooter.appendChild(followUp);
+      }
+
+      body.appendChild(metaFooter);
+      card.appendChild(body);
+      return card;
+    }
+
+    // Render all findings directly (sorted by severity)
+    var sevRank = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
+    var sorted = findings.slice().sort(function(a, b) { return (sevRank[a.severity] || 3) - (sevRank[b.severity] || 3); });
+    sorted.forEach(function(f, idx) { findingsContainer.appendChild(buildFindingCard(f, idx)); });
+
+    // === AGGREGATE SECTION (for --scan all with multiple types) ===
+    if (Object.keys(byScanType).length > 1) {
+      var aggSection = document.createElement('div');
+      aggSection.style.cssText = 'padding:24px;border-top:1px solid var(--border);';
+
+      // Scan type breakdown
+      aggSection.innerHTML = '<h3 style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px">Scan Type Breakdown</h3>';
+      var maxCount = Math.max.apply(null, Object.values(byScanType).concat([1]));
+      var barHtml = '';
+      Object.keys(byScanType).sort().forEach(function(st) {
+        var count = byScanType[st];
+        var desc = patternDescriptions[st.replace(/-/g, '_')] || '';
+        barHtml += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;cursor:help" title="' + desc.replace(/"/g, '&quot;') + '">' +
+          '<span style="width:180px;font-size:12px;color:var(--text-muted);text-align:right;flex-shrink:0">' + st + '</span>' +
+          '<div style="flex:1;background:var(--surface-2);border-radius:3px;height:22px;overflow:hidden">' +
+            '<div style="width:' + (count / maxCount * 100) + '%;background:var(--icij-color);height:100%;border-radius:3px;min-width:3px;transition:width 0.5s"></div>' +
+          '</div>' +
+          '<span style="width:50px;font-size:12px;color:var(--text);font-weight:500">' + count + ' hit' + (count !== 1 ? 's' : '') + '</span>' +
+        '</div>';
+      });
+      aggSection.innerHTML += barHtml;
+
+      // Jurisdictions
+      if (jurs.length) {
+        aggSection.innerHTML += '<h3 style="font-size:15px;font-weight:600;color:var(--text);margin:24px 0 12px">Jurisdictions Observed</h3>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          jurs.map(function(j) {
+            var secrecy = ['VG', 'PA', 'KY', 'SC', 'BZ', 'WS', 'MH', 'KN'].indexOf(j) >= 0;
+            return '<span style="background:var(--surface-2);padding:4px 10px;border-radius:4px;font-size:12px;color:' + (secrecy ? 'var(--pep-color)' : 'var(--text)') + ';border:1px solid var(--border)" title="' + (secrecy ? 'High-secrecy jurisdiction' : 'Jurisdiction') + '">' + j + (secrecy ? ' *' : '') + '</span>';
+          }).join('') +
+          '</div>' +
+          '<div style="font-size:10px;color:var(--text-dim);margin-top:6px">* High-secrecy jurisdiction (Financial Secrecy Index)</div>';
+      }
+
+      root.appendChild(aggSection);
+    }
+
+    // === FOOTER ===
+    var footer = document.createElement('div');
+    footer.style.cssText = 'padding:12px 24px;border-top:1px solid var(--border);background:var(--surface);text-align:center;';
+    footer.innerHTML = '<div style="font-size:10px;color:var(--text-dim)">Sources: ICIJ Offshore Leaks, OpenSanctions, GLEIF, SEC EDGAR, UK Companies House, CourtListener, Aleph, Wikidata, Land Registry</div>';
+    root.appendChild(footer);
+  })();
+} else {
+// ============================================================
+// INVESTIGATION MODE (original layout — all code below)
+// ============================================================
+
 const nodes = data.nodes || [];
 const edges = data.edges || [];
 
@@ -2721,44 +3342,50 @@ function goToPattern(patternName) {
 
   // Collect dated events from all sources
   const events = [];
+  const eventSeen = new Set();
+  function addEvent(date, label, source, type, detail) {
+    if (!date || isNaN(date)) return;
+    const key = date.toISOString().slice(0,10) + '|' + (label||'').slice(0,40) + '|' + type;
+    if (eventSeen.has(key)) return;
+    eventSeen.add(key);
+    events.push({ date, label, source, type, detail: detail || '' });
+  }
 
-  // ICIJ investigations
+  // 1. Server-extracted timeline events (sanctions, disqualifications, enforcement, career)
+  const serverEvents = data.timeline_events || [];
+  serverEvents.forEach(e => {
+    const d = new Date(e.date);
+    addEvent(d, e.label, e.source, e.type, e.detail);
+  });
+
+  // 2. ICIJ investigation publication dates
   const invYears = { 'offshore-leaks': 2013, 'bahamas-leaks': 2016, 'panama-papers': 2016, 'paradise-papers': 2017, 'pandora-papers': 2021 };
   nodes.forEach(n => {
     if (n.investigation && invYears[n.investigation]) {
-      events.push({ date: new Date(invYears[n.investigation], 0, 1), label: n.label, source: 'icij', type: n.investigation.replace(/-/g,' ') });
+      addEvent(new Date(invYears[n.investigation], 0, 1), n.label, 'icij', n.investigation.replace(/-/g,' '));
     }
   });
 
-  // SEC filings
+  // 3. SEC filings
   nodes.forEach(n => {
     if (n.source === 'sec') {
-      const dateStr = (n.datasets || []).length ? null : null;
-      // Check for file_date in various places
       const fd = n.file_date || (n.properties && n.properties.file_date);
-      if (fd) {
-        const d = new Date(fd);
-        if (!isNaN(d)) events.push({ date: d, label: n.label, source: 'sec', type: 'SEC Filing' });
-      }
+      if (fd) addEvent(new Date(fd), n.label, 'sec', 'SEC Filing');
     }
   });
 
-  // Court cases
+  // 4. Court cases
   nodes.forEach(n => {
     if (n.source === 'courtlistener') {
       const fd = n.date_filed || (n.properties && n.properties.date_filed);
-      if (fd) {
-        const d = new Date(fd);
-        if (!isNaN(d)) events.push({ date: d, label: n.label, source: 'courtlistener', type: 'Court Case' });
-      }
+      if (fd) addEvent(new Date(fd), n.label, 'courtlistener', 'Court Case');
     }
   });
 
-  // Incorporation dates
+  // 5. Incorporation dates
   nodes.forEach(n => {
     if (n.incorporation_date) {
-      const d = new Date(n.incorporation_date);
-      if (!isNaN(d)) events.push({ date: d, label: n.label, source: n.source || 'icij', type: 'Incorporation' });
+      addEvent(new Date(n.incorporation_date), n.label, n.source || 'icij', 'Incorporation');
     }
   });
 
@@ -2823,10 +3450,12 @@ function goToPattern(patternName) {
     .attr('stroke', 'var(--bg)').attr('stroke-width', 1)
     .on('mouseover', (event, d) => {
       const tip = document.getElementById('tooltip');
-      tip.innerHTML = `<strong>${d.label.slice(0,40)}</strong><br>${d.type}<br>${d.date.toISOString().slice(0,10)}`;
+      let html = `<strong>${d.label.slice(0,50)}</strong><br><span style="color:var(--icij-color)">${d.type}</span><br>${d.date.toISOString().slice(0,10)}`;
+      if (d.detail) html += `<br><span style="font-size:10px;color:var(--text-muted)">${d.detail.slice(0,150)}</span>`;
+      tip.innerHTML = html;
       tip.classList.add('visible');
-      tip.style.left = (event.clientX + 14) + 'px';
-      tip.style.top = (event.clientY - 14) + 'px';
+      tip.style.left = Math.min(event.clientX + 14, window.innerWidth - 340) + 'px';
+      tip.style.top = Math.max(0, event.clientY - 14 - tip.offsetHeight) + 'px';
     })
     .on('mouseout', () => document.getElementById('tooltip').classList.remove('visible'));
 })();
@@ -2843,6 +3472,18 @@ function goToPattern(patternName) {
   const invYears = { 'offshore-leaks': 2013, 'bahamas-leaks': 2016, 'panama-papers': 2016, 'paradise-papers': 2017, 'pandora-papers': 2021 };
   const srcLabels = { icij: 'ICIJ', opensanctions: 'OpenSanctions', gleif: 'GLEIF', sec: 'SEC EDGAR', companies_house: 'UK Companies House', courtlistener: 'Court Records', aleph: 'Aleph', wikidata: 'Wikidata', land_registry: 'Land Registry' };
   const srcColors = { icij: 'var(--icij-color)', opensanctions: 'var(--os-color)', gleif: 'var(--gleif-color)', sec: 'var(--sec-color)', companies_house: 'var(--uk-color)', courtlistener: 'var(--court-color)', aleph: 'var(--aleph-color)', wikidata: 'var(--wikidata-color)', land_registry: 'var(--land-color)' };
+
+  // Server-extracted timeline events (sanctions, disqualifications, etc.)
+  const serverEvts = data.timeline_events || [];
+  serverEvts.forEach(e => {
+    const d = new Date(e.date);
+    if (!isNaN(d)) events.push({
+      date: d,
+      source: e.source || 'opensanctions',
+      headline: `${e.type}: ${e.label}`,
+      detail: e.detail || '',
+    });
+  });
 
   // ICIJ investigations
   const seenInv = new Set();
@@ -3891,6 +4532,8 @@ const temporalOverlaps = enrichment.temporal_overlaps || null;
 
   container.innerHTML = html;
 })();
+
+} // end of investigation mode else-block
 </script>
 </body>
 </html>

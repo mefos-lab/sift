@@ -1534,10 +1534,10 @@ async def list_tools() -> list[Tool]:
                     },
                     "budget": {
                         "type": "integer",
-                        "description": "Maximum API calls to make (10-100, default 50)",
+                        "description": "Maximum API calls to make (10-500, default 50)",
                         "default": 50,
                         "minimum": 10,
-                        "maximum": 100,
+                        "maximum": 500,
                     },
                     "max_fanout": {
                         "type": "integer",

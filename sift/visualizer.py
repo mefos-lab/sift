@@ -5,6 +5,11 @@ Supports two output modes:
   Template loads D3 and data from external files.  Edit the template and refresh.
 - **Portable**: writes a single self-contained HTML with D3 and data inlined.
   Good for sharing a file by email/Slack.
+
+Supports two data modes:
+- **Investigation** (default): network graph centered on a subject.
+- **Scan**: findings dashboard with mini-graphs per confirmed pattern instance.
+  Detected via ``data["mode"] == "scan"``.
 """
 
 from __future__ import annotations
@@ -54,12 +59,16 @@ def generate_visualization(
     Path
         The path to the generated HTML file.
     """
-    nodes, edges = _build_graph(investigation_data)
-    # Collect optional enrichment data (financial, people, litigation, filings)
-    enrichment = _collect_enrichment(investigation_data)
+    # Detect scan mode vs investigation mode
+    is_scan = investigation_data.get("mode") == "scan"
 
-    graph_json = json.dumps(
-        {
+    if is_scan:
+        data_json = _build_scan_json(investigation_data)
+    else:
+        nodes, edges = _build_graph(investigation_data)
+        enrichment = _collect_enrichment(investigation_data)
+        timeline_events = _extract_timeline_events(investigation_data, nodes)
+        payload = {
             "metadata": {
                 "query": investigation_data.get("query", "Investigation"),
                 "generated_at": datetime.now(timezone.utc).strftime(
@@ -72,16 +81,21 @@ def generate_visualization(
             "next_steps": investigation_data.get("next_steps")
                 or _generate_next_steps(nodes, edges, investigation_data),
             **({"enrichment": enrichment} if enrichment else {}),
-        },
-        ensure_ascii=False,
-    )
+        }
+        if timeline_events:
+            payload["timeline_events"] = timeline_events
+        data_json = json.dumps(payload, ensure_ascii=False)
 
     if slug is None:
-        slug = _slugify(investigation_data.get("query", "investigation"))
+        if is_scan:
+            scan_types = investigation_data.get("scan_types", ["scan"])
+            slug = _slugify("scan-" + "-".join(scan_types))
+        else:
+            slug = _slugify(investigation_data.get("query", "investigation"))
 
     if portable:
-        return _write_portable(graph_json, slug, output_path, open_browser)
-    return _write_split(graph_json, slug, output_path, open_browser)
+        return _write_portable(data_json, slug, output_path, open_browser)
+    return _write_split(data_json, slug, output_path, open_browser)
 
 
 # ------------------------------------------------------------------
@@ -199,8 +213,256 @@ def _write_portable(
 
 
 # ------------------------------------------------------------------
+# Scan mode — findings dashboard
+# ------------------------------------------------------------------
+
+
+def _build_scan_json(data: dict) -> str:
+    """Build the JSON payload for scan mode visualization.
+
+    Scan results are a collection of independent findings, not a
+    single network graph.  Each finding has its own mini-graph
+    (the chain of entities that constitutes the pattern instance).
+    """
+    findings = data.get("findings", [])
+
+    # Build mini-graph nodes/edges for each finding from its chain
+    for finding in findings:
+        mini_nodes: dict[str, dict] = {}
+        mini_edges: list[dict] = []
+
+        # Index entities by ID; also build a label->id lookup
+        label_to_id: dict[str, str] = {}
+        for entity in finding.get("entities", []):
+            eid = entity["id"]
+            # Pass through all entity properties for rich tooltips
+            node = dict(entity)
+            node.setdefault("sanctioned", False)
+            node.setdefault("pep", False)
+            node.setdefault("type", "Entity")
+            mini_nodes[eid] = node
+            label_to_id[entity.get("name", "")] = eid
+
+        def _resolve_chain_endpoint(label: str) -> str:
+            """Find or create a node for a chain endpoint label."""
+            if not label:
+                return ""
+            # Match by label in existing entities
+            if label in label_to_id:
+                return label_to_id[label]
+            # Check if any existing node has this label
+            for nid, n in mini_nodes.items():
+                if n.get("name") == label or n.get("label") == label:
+                    label_to_id[label] = nid
+                    return nid
+            # Create a new lightweight node (e.g. a jurisdiction label)
+            nid = _slugify(label)
+            mini_nodes[nid] = {
+                "id": nid,
+                "name": label,
+                "label": label,
+                "type": "Jurisdiction",
+                "sanctioned": False,
+                "pep": False,
+            }
+            label_to_id[label] = nid
+            return nid
+
+        for link in finding.get("chain", []):
+            from_id = _resolve_chain_endpoint(link.get("from", ""))
+            to_id = _resolve_chain_endpoint(link.get("to", ""))
+            if from_id and to_id and from_id != to_id:
+                mini_edges.append({
+                    "source": from_id,
+                    "target": to_id,
+                    "relationship": link.get("rel", "linked"),
+                })
+
+        # Ensure every node has a "label" key (some may only have "name")
+        for n in mini_nodes.values():
+            if "label" not in n:
+                n["label"] = n.get("name", "Unknown")
+
+        finding["_mini_nodes"] = list(mini_nodes.values())
+        finding["_mini_edges"] = mini_edges
+
+    return json.dumps(
+        {
+            "mode": "scan",
+            "metadata": {
+                "scan_types": data.get("scan_types", []),
+                "query": data.get("query"),
+                "generated_at": data.get("generated_at")
+                    or datetime.now(timezone.utc).strftime(
+                        "%Y-%m-%d %H:%M UTC"
+                    ),
+            },
+            "budget": data.get("budget", {}),
+            "findings": findings,
+            "summary": data.get("summary", {}),
+        },
+        ensure_ascii=False,
+    )
+
+
+
+# ------------------------------------------------------------------
 # Internal helpers
 # ------------------------------------------------------------------
+
+
+def _extract_timeline_events(data: dict, nodes: list[dict]) -> list[dict]:
+    """Extract all datable events from investigation data for the timeline.
+
+    Scans OpenSanctions results for sanctions designation dates,
+    enforcement actions, director disqualifications, and other
+    temporal events that the graph builder doesn't capture.
+    Returns a list of event dicts with ``date``, ``label``,
+    ``source``, ``type``, and optionally ``detail``.
+    """
+    events: list[dict] = []
+    seen = set()  # (date, label) dedup
+
+    def _add(date_str: str, label: str, source: str, event_type: str,
+             detail: str = "") -> None:
+        if not date_str or not label:
+            return
+        # Normalize date — take first 10 chars (YYYY-MM-DD)
+        d = date_str[:10]
+        if len(d) < 4:
+            return
+        key = (d, label[:50], event_type)
+        if key in seen:
+            return
+        seen.add(key)
+        events.append({
+            "date": d,
+            "label": label[:80],
+            "source": source,
+            "type": event_type,
+            **({"detail": detail} if detail else {}),
+        })
+
+    # --- OpenSanctions results: sanctions, designations, enforcement ---
+    for r in data.get("opensanctions_results", []):
+        if not isinstance(r, dict):
+            continue
+        props = r.get("properties", {})
+        caption = r.get("caption", "")
+
+        # Sanctions designation dates
+        for sanc in props.get("sanctions", []):
+            if not isinstance(sanc, dict):
+                continue
+            sp = sanc.get("properties", {})
+            for sd in sp.get("startDate", []):
+                authority = ", ".join(sp.get("authority", []))[:60]
+                provisions = ", ".join(sp.get("provisions", []))[:80]
+                program = (sp.get("program", [""])[0] or "")[:80]
+                detail_parts = []
+                if authority:
+                    detail_parts.append(authority)
+                if program:
+                    detail_parts.append(program)
+                if provisions:
+                    detail_parts.append(provisions)
+                _add(sd, caption, "opensanctions",
+                     "Sanctions Designation",
+                     ". ".join(detail_parts))
+
+            # Modification dates
+            for md in sp.get("modifiedAt", []):
+                _add(md, caption, "opensanctions",
+                     "Sanctions Modified",
+                     f"Sanctions listing modified. {', '.join(sp.get('authority', []))[:60]}")
+
+        # Director disqualification
+        for note in props.get("notes", []):
+            if not isinstance(note, str):
+                continue
+            if "Director Disqualification" in note:
+                # Try to extract date from "imposed on DD/MM/YYYY"
+                import re as _re
+                dm = _re.search(r"imposed on (\d{2}/\d{2}/\d{4})", note)
+                if dm:
+                    parts = dm.group(1).split("/")
+                    iso_date = f"{parts[2]}-{parts[1]}-{parts[0]}"
+                    _add(iso_date, caption, "opensanctions",
+                         "Director Disqualification", note[:120])
+
+        # Entity created/modified dates from OpenSanctions
+        for cd in props.get("createdAt", []):
+            _add(cd, caption, "opensanctions", "Entity Listed",
+                 "First listed in enforcement/sanctions database")
+
+        # First seen / last change (use sparingly — only for sanctioned/crime entities)
+        topics = props.get("topics", [])
+        if any(t in topics for t in ("sanction", "crime", "crime.fin", "wanted")):
+            first_seen = r.get("first_seen", "")
+            if first_seen:
+                _add(first_seen[:10], caption, "opensanctions",
+                     "First Flagged",
+                     "First appearance in OpenSanctions database")
+            last_change = r.get("last_change", "")
+            if last_change:
+                _add(last_change[:10], caption, "opensanctions",
+                     "Record Updated",
+                     "Most recent update to this entity's record")
+
+    # --- Enrichment data: Wikidata career/PEP dates ---
+    for pep in data.get("wikidata_pep", []):
+        if isinstance(pep, dict):
+            pos = pep.get("positionLabel", "")
+            start = pep.get("start", "")
+            end = pep.get("end", "")
+            query = data.get("query", "")
+            if start:
+                _add(start[:10], query, "wikidata",
+                     "Position Started", f"Appointed: {pos}")
+            if end:
+                _add(end[:10], query, "wikidata",
+                     "Position Ended", f"Left office: {pos}")
+
+    for career in data.get("wikidata_career", []):
+        if isinstance(career, dict):
+            pos = career.get("positionLabel", career.get("employerLabel", ""))
+            start = career.get("start", "")
+            end = career.get("end", "")
+            query = data.get("query", "")
+            if start and pos:
+                _add(start[:10], query, "wikidata",
+                     "Career Event", f"Started: {pos}")
+            if end and pos:
+                _add(end[:10], query, "wikidata",
+                     "Career Event", f"Ended: {pos}")
+
+    # --- UK Companies House filing history ---
+    for filing in data.get("uk_filing_history", []):
+        if isinstance(filing, dict):
+            fd = filing.get("date", "")
+            desc = filing.get("description", "")
+            company = filing.get("company_name", "")
+            if fd:
+                _add(fd, company or desc[:40], "companies_house",
+                     "UK Filing", desc[:100])
+
+    # --- Court case dates (from enrichment, not just nodes) ---
+    for case in data.get("court_cases", []):
+        if isinstance(case, dict):
+            fd = case.get("dateFiled", case.get("date_filed", ""))
+            name = case.get("caseName", case.get("case_name", ""))
+            terminated = case.get("dateTerminated", "")
+            if fd:
+                _add(fd, name[:60], "courtlistener",
+                     "Case Filed",
+                     case.get("cause", "")[:100])
+            if terminated:
+                _add(terminated, name[:60], "courtlistener",
+                     "Case Terminated", "")
+
+    # Sort by date
+    events.sort(key=lambda e: e["date"])
+    return events
 
 
 # Enrichment data keys that the viewer can display
