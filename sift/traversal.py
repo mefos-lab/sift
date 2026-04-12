@@ -502,7 +502,12 @@ async def traverse(
                         _add_edge(fnode.id, cid, "subsidiary", hop)
 
             # ── Companies House: PSCs + OS cross-bridge ──
-            if ch_client and fnode.id.startswith("uk-") and api_calls < budget:
+            # Only expand actual company nodes (uk-NNNNNNNN), not PSC
+            # person nodes (uk-psc-...) which would send garbage company
+            # numbers to the API.
+            if (ch_client and fnode.id.startswith("uk-")
+                    and not fnode.id.startswith("uk-psc-")
+                    and api_calls < budget):
                 cn = fnode.id[3:]
                 pscs = await _api(lambda c=cn: ch_client.get_pscs(c),
                                   service="Companies House", endpoint="/pscs")
