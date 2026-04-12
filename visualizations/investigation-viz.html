@@ -977,9 +977,13 @@ function addCard(label, value, detail, cls = '', refId = '') {
   const refLink = refId
     ? ` <a href="#" onclick="goToRef('${refId}');return false" style="color:var(--text-dim);text-decoration:none;font-size:10px" title="See definition in Reference tab">&#x2197;</a>`
     : '';
+  const valueStyle = cls === 'critical' ? 'color:var(--sanction-color)' : cls === 'warning' ? 'color:var(--pep-color)' : '';
+  const valueClick = refId
+    ? ` onclick="goToRef('${refId}');return false" style="${valueStyle};cursor:pointer" title="Jump to details"`
+    : (valueStyle ? ` style="${valueStyle}"` : '');
   card.innerHTML = `
     <div class="card-label">${label}${refLink}</div>
-    <div class="card-value" ${cls === 'critical' ? 'style="color:var(--sanction-color)"' : cls === 'warning' ? 'style="color:var(--pep-color)"' : ''}>${value}</div>
+    <div class="card-value"${valueClick}>${value}</div>
     <div class="card-detail">${detail}</div>
   `;
   grid.appendChild(card);
@@ -1009,28 +1013,28 @@ if (isMultiSeed) {
 }
 
 addCard('Entities Found', nodes.length,
-  `${nodes.length} unique entities discovered across ${allSources.length} databases (${allSources.join(', ')}). Each entity is a person, company, address, or intermediary connected to the investigation subject.`,
-  'info', 'ref-sources');
+  `${nodes.length} unique entities discovered across ${allSources.length} <a href="#" onclick="goToRef('ref-sources');return false" style="color:var(--icij-color)">databases</a> (${allSources.join(', ')}). Each entity is a person, company, address, or intermediary connected to the investigation subject.`,
+  'info', 'ref-entity-index');
 
 if (sanctionedCount > 0) {
   const sanctionedNames = nodes.filter(n => n.sanctioned).map(n => n.label).slice(0, 3);
   addCard('Sanctioned', sanctionedCount,
-    `${sanctionedCount} entit${sanctionedCount > 1 ? 'ies' : 'y'} on <a href="#" onclick="goToRef('ref-entity-index');return false" style="color:var(--sanction-color)">international sanctions lists</a> (OFAC, EU, UK, UN): ${sanctionedNames.join(', ')}${sanctionedCount > 3 ? '...' : ''}. Active designations mean legal restrictions on financial transactions.`,
-    'critical', 'ref-entity-index');
+    `${sanctionedCount} entit${sanctionedCount > 1 ? 'ies' : 'y'} on <a href="#" onclick="goToRef('idx-sanctioned');return false" style="color:var(--sanction-color)">international sanctions lists</a> (OFAC, EU, UK, UN): ${sanctionedNames.join(', ')}${sanctionedCount > 3 ? '...' : ''}. Active designations mean legal restrictions on financial transactions.`,
+    'critical', 'idx-sanctioned');
 }
 
 if (crossLinked > 0) {
   addCard('Cross-Referenced', crossLinked,
     `${crossLinked} entit${crossLinked > 1 ? 'ies appear' : 'y appears'} in BOTH offshore leak databases AND sanctions/PEP lists. These are the highest-value findings — two independent sources corroborate each other.`,
-    crossLinked > 0 ? 'warning' : 'info', 'ref-entity-index');
+    crossLinked > 0 ? 'warning' : 'info', 'idx-crossref');
 }
 
 if (pepCount > 0) {
   const pepNames = nodes.filter(n => n.pep).map(n => n.label).slice(0, 5);
   const pepExtra = pepCount > 5 ? ` and ${pepCount - 5} more` : '';
   addCard('PEP Connections', pepCount,
-    `${pepCount} <a href="#" onclick="goToRef('ref-entity-index');return false" style="color:var(--pep-color)">Politically Exposed Person${pepCount > 1 ? 's' : ''}</a>: ${pepNames.join(', ')}${pepExtra}. PEP status indicates elevated corruption risk due to position of influence — triggers <a href="#" onclick="goToRef('ref-entity-index');return false" style="color:var(--pep-color)">enhanced due diligence</a> under AML/KYC regulations.`,
-    'warning', 'ref-entity-index');
+    `${pepCount} <a href="#" onclick="goToRef('idx-pep');return false" style="color:var(--pep-color)">Politically Exposed Person${pepCount > 1 ? 's' : ''}</a>: ${pepNames.join(', ')}${pepExtra}. PEP status indicates elevated corruption risk due to position of influence — triggers <a href="#" onclick="goToRef('idx-pep');return false" style="color:var(--pep-color)">enhanced due diligence</a> under AML/KYC regulations.`,
+    'warning', 'idx-pep');
 }
 
 const jKeys = Object.keys(allCountries);
@@ -2052,9 +2056,10 @@ function goToPattern(patternName) {
     </tr>`;
   }
 
-  function entitySection(title, color, items, description) {
+  function entitySection(title, color, items, description, anchorId) {
     if (!items.length) return '';
-    return `<div style="margin-bottom:20px">
+    const idAttr = anchorId ? ` id="${anchorId}"` : '';
+    return `<div style="margin-bottom:20px"${idAttr}>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <span style="font-size:12px;font-weight:600;color:${color}">${title}</span>
         <span style="font-size:11px;color:var(--text-dim)">(${items.length})</span>
@@ -2081,15 +2086,20 @@ function goToPattern(patternName) {
   </p>`;
 
   html += entitySection('Sanctioned Entities', 'var(--sanction-color)', sanctioned,
-    'Entities on active international sanctions lists (OFAC, EU, UK, UN). Financial transactions involving these entities may be legally prohibited.');
+    'Entities on active international sanctions lists (OFAC, EU, UK, UN). Financial transactions involving these entities may be legally prohibited.',
+    'idx-sanctioned');
   html += entitySection('Politically Exposed Persons', 'var(--pep-color)', peps,
-    'Current or former government officials, their family members, and close associates. PEP status triggers enhanced due diligence requirements under AML/KYC regulations.');
+    'Current or former government officials, their family members, and close associates. PEP status triggers enhanced due diligence requirements under AML/KYC regulations.',
+    'idx-pep');
   html += entitySection('Close Associates (RCA)', 'var(--rca-color)', rcas.filter(n => !n.pep && !n.sanctioned),
-    'Persons identified as close associates of PEPs who are not themselves classified as PEPs. RCA status typically extends the same enhanced scrutiny.');
+    'Persons identified as close associates of PEPs who are not themselves classified as PEPs. RCA status typically extends the same enhanced scrutiny.',
+    'idx-rca');
   html += entitySection('Cross-Referenced Entities', 'var(--both-color)', crossRef.filter(n => !n.sanctioned && !n.pep),
-    'Entities found in both ICIJ Offshore Leaks and OpenSanctions databases. Independent sources corroborating the same finding — these are the highest-value investigative leads.');
+    'Entities found in both ICIJ Offshore Leaks and OpenSanctions databases. Independent sources corroborating the same finding — these are the highest-value investigative leads.',
+    'idx-crossref');
   html += entitySection('Other Entities', 'var(--text-muted)', rest.filter(n => !isAddress(n)).slice(0, 100),
-    `All other entities in the investigation network (showing up to 100 of ${rest.filter(n => !isAddress(n)).length}). Includes companies, officers, intermediaries, and other connected nodes.`);
+    `All other entities in the investigation network (showing up to 100 of ${rest.filter(n => !isAddress(n)).length}). Includes companies, officers, intermediaries, and other connected nodes.`,
+    'idx-other');
 
   el.innerHTML = html;
 })();

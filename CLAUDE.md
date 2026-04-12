@@ -103,6 +103,27 @@ and node IDs where available]
 Patterns are never deleted — they may be marked DEPRECATED if
 subsequent evidence shows they were misidentified.
 
+## MCP Setup
+
+Add to `.mcp.json` in the project root (already present):
+
+```json
+{
+  "mcpServers": {
+    "sift": {
+      "command": ".venv/bin/python",
+      "args": ["-m", "sift.server"]
+    }
+  }
+}
+```
+
+Requires a Python venv with dependencies installed:
+```
+python3 -m venv .venv
+.venv/bin/pip install mcp httpx
+```
+
 ## Configuration
 
 Create a `.env` file in the project root:

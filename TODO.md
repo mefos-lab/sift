@@ -2,49 +2,43 @@
 
 Prioritized by impact with current data sources. No new APIs needed.
 
-## 1. ~~SEC EDGAR Filing Content Parsing~~ (mostly done)
-- ~~Subsidiary lists (Exhibit 21) — complete corporate tree with jurisdictions~~ ✓ `get_subsidiary_list` + `_parse_exhibit_21`
-- ~~XBRL financial data — revenue, assets, liabilities~~ ✓ `get_company_facts` (10 metrics, annual + quarterly)
+## ~~1. SEC EDGAR Filing Content Parsing~~ ✓
+- ~~Subsidiary lists (Exhibit 21)~~ ✓ `get_subsidiary_list` + `_parse_exhibit_21`
+- ~~XBRL financial data~~ ✓ `get_company_facts`
 - ~~Filing document index~~ ✓ `get_filing_documents`
-- Related party transactions — names, amounts, terms
-- Schedule 13D/G beneficial ownership — stake percentages, intent
-- Risk factor sections mentioning legal proceedings or regulatory actions
+- ~~Related party transactions~~ ✓ `get_related_party_transactions` (Item 13 extraction + table parsing)
+- ~~Schedule 13D/G beneficial ownership~~ ✓ `get_schedule_13d` (reporting person, % of class, purpose, source of funds)
+- ~~Risk factor sections~~ ✓ `get_risk_factors` (Item 1A, keyword-filtered)
 
-## 2. Wikidata Deep Enrichment
-Extract structured biographical and relational data for PEPs and key entities.
-- Political positions held with start/end dates
-- Family relationships (spouse, children, parents, siblings)
-- Citizenship and nationality
-- Education and professional history
-- Estimated net worth where available
-- Board memberships and corporate roles
-- Cross-reference political appointment dates with entity incorporation dates
-- **Why:** Temporal correlation ("appointed minister 3 months before forming 5 BVI companies") is the most powerful investigative signal available from public data.
+## ~~2. Wikidata Deep Enrichment~~ ✓
+- ~~Political positions with start/end dates~~ ✓ `get_pep_info`
+- ~~Family relationships~~ ✓ `get_family` (spouse, children, parents, siblings with dates)
+- ~~Citizenship and nationality~~ ✓ `get_citizenship`
+- ~~Education and professional history~~ ✓ `get_education_career`
+- ~~Board memberships and corporate roles~~ ✓ included in `get_education_career`
+- ~~Cross-reference political dates vs entity inception~~ ✓ `cross_reference_dates` (±6 month overlap detection)
+- ~~Composite enrichment~~ ✓ `get_deep_enrichment` (all above in parallel)
+- Estimated net worth where available (not in structured Wikidata — skip)
 
-## 3. Companies House Accounts and Filing History
-Go beyond officers/PSC — pull financial accounts and filing timeline.
-- Annual accounts: net assets, revenue, profit (where filed)
-- Filing history: gaps, late filings, change of registered office
-- Confirmation statements and their timeliness
-- Charge register (secured lending)
-- **Why:** Financial data for UK entities plus filing gaps as red flags.
+## ~~3. Companies House Accounts and Filing History~~ ✓
+- ~~Filing history with gap analysis~~ ✓ `get_filing_history` + `_analyze_filing_gaps`
+- ~~Annual accounts summary~~ ✓ `get_accounts` (type, period, next due, overdue)
+- ~~Confirmation statements~~ ✓ `get_confirmation_statements` (timeliness gaps >14mo)
+- ~~Charge register~~ ✓ `get_charges` (status, lender names, particulars)
 
-## 4. CourtListener Docket Enrichment
-Extract substantive content from court cases, not just case names.
-- Complaint/petition text (where available via RECAP)
-- Amounts in dispute
-- Named parties and their roles (plaintiff, defendant, third-party)
-- Case type and nature of suit codes
-- Related cases
-- **Why:** "Federal court case filed" is useless without context. The complaint text often details the alleged scheme.
+## ~~4. CourtListener Docket Enrichment~~ ✓
+- ~~Complaint/petition text~~ ✓ `get_complaint_text` (entry #1 RECAP document)
+- ~~Amounts in dispute~~ ✓ `_extract_amount` (keyword-proximate dollar parsing)
+- ~~Named parties and roles~~ ✓ `get_parties` (plaintiff/defendant/attorney)
+- ~~Case type and nature of suit~~ ✓ `get_docket_detail`
+- ~~Related cases~~ ✓ included in `get_docket_detail`
 
-## 5. Temporal Correlation Analysis
-Cross-reference dated events across sources for investigative signals.
-- Entity formation dates vs political appointment dates (Wikidata)
+## 5. Temporal Correlation Analysis (partially done)
+- ~~Entity formation dates vs political appointment dates~~ ✓ `wikidata_date_xref`
 - Entity formation dates vs sanctions listing dates (OpenSanctions)
 - Filing bursts (multiple filings in a short window)
 - Formation-to-dissolution timelines (rapid dissolution = red flag)
-- **Why:** Timing is often the strongest evidence of intent. All the dates are already in the data.
+- **Why:** Timing is often the strongest evidence of intent.
 
 ## 6. Financial Secrecy Index Integration
 Score jurisdictions using Tax Justice Network's Financial Secrecy Index.
@@ -89,14 +83,13 @@ Use the agent's judgment for fuzzy matching decisions the normalizer can't make.
 - Flag assessment in the report with reasoning
 - **Why:** Automated fuzzy matching either over-merges or under-merges. The agent can apply context the normalizer can't.
 
-## 5. Viewer: Enrichment Data Panels
-Surface the new enrichment data (items 1a-4) in the investigation viewer.
-- **Financials panel** — CH accounts (net assets, revenue, profit), SEC XBRL metrics, CH charges/secured lending. Table with sparklines or bar charts for multi-year data.
-- **Filing timeline extension** — CH filing history + SEC filings on the existing Timeline tab. Flag gaps, late filings, and address changes as red markers.
-- **Family/associates tree** — Wikidata family relationships + PEP positions. Extend Ownership Tree tab or add a new "People" tab with a family tree layout.
-- **Litigation panel** — CourtListener complaint text, party roles (plaintiff/defendant), amounts in dispute, nature of suit. New tab or section in Reference.
-- **Temporal correlation highlights** — Overlay political appointment dates against entity formation dates on the Timeline tab. Flag overlaps within ±6 months.
+## ~~Viewer: Enrichment Data Panels~~ ✓
+- ~~Financials tab~~ ✓ SEC XBRL metrics, UK accounts, charge register
+- ~~Filing timeline extension~~ ✓ CH/SEC filings as swim lane, gap markers
+- ~~People tab~~ ✓ family tree, career timeline, PEP badges
+- ~~Litigation tab~~ ✓ case cards, parties, collapsible complaint text
+- ~~Temporal correlation highlights~~ ✓ dashed lines on timeline for ±6mo overlaps
 
 ## Viewer Improvements (remaining)
-- Inline entity links from narrative counts to entity index (item 4 from original list)
-- End-to-end test of skill-generated next steps (item 5)
+- Inline entity links from narrative counts to entity index
+- End-to-end test of skill-generated next steps
