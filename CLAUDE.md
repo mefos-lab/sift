@@ -196,10 +196,27 @@ The value is the minimum seconds between requests. When a service
 name isn't in the dict, no throttling is applied — so always add
 new services here.
 
-## Contributing
+## Identity and Privacy
 
-Contributors should set a repo-specific git identity before
-committing to keep personal information out of the history:
+This project uses pseudonymous identities. Before any action
+that touches GitHub or other external services, consider whether
+it will expose the user's real identity.
+
+**Rules:**
+- Never use the user's real name or personal email in commits,
+  PRs, issues, documentation, or any public-facing content
+- Do NOT create GitHub PRs, issues, or comments — these expose
+  the authenticated GitHub account (username + avatar) and
+  cannot be permanently deleted
+- Merge branches locally and push directly to main instead
+- Before any `gh` CLI command, consider: will this show the
+  user's GitHub identity publicly?
+- Strip metadata from images before committing (check for
+  EXIF, XMP, GPS, author fields)
+- Check all file contents for identifying paths, emails, or
+  names before pushing
+
+**Contributor git identity:**
 
 ```bash
 git config user.name "your-handle"
