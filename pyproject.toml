@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "sift"
 version = "0.4.0"
-description = "MCP server for investigative journalism — cross-references offshore leaks, sanctions, corporate registries, SEC filings, and court records"
+description = "MCP server that cross-references offshore leaks, sanctions, corporate registries, SEC filings, and court records"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"

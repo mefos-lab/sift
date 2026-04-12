@@ -64,7 +64,7 @@ def export_markdown(
     lines.append(f"# Investigation: {query}")
     lines.append(f"")
     lines.append(f"**Generated:** {now}  ")
-    lines.append(f"**Tool:** Sift — Public records intelligence for investigative journalism  ")
+    lines.append(f"**Tool:** Sift — Cross-referencing public financial and corporate data")
     lines.append(f"**Sources:** ICIJ Offshore Leaks, OpenSanctions, GLEIF, SEC EDGAR, UK Companies House, CourtListener")
     lines.append(f"")
 

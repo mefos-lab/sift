@@ -1,7 +1,6 @@
-# Sift — Investigative Journalism MCP Server
+# Sift — Multi-Source MCP Server
 
-MCP server for financial crime investigation and investigative
-journalism. Cross-references 9 data sources: ICIJ Offshore Leaks,
+MCP server that cross-references 9 public data sources: ICIJ Offshore Leaks,
 OpenSanctions, GLEIF LEI Registry, SEC EDGAR, UK Companies House,
 CourtListener (US court records), OCCRP Aleph (investigative datasets),
 UK Land Registry (property transactions), and Wikidata (entity

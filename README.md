@@ -5,7 +5,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)]()
 [![Data Sources](https://img.shields.io/badge/data%20sources-9-orange)]()
 
-An [MCP server](https://modelcontextprotocol.io/) for financial crime investigation and investigative journalism. Cross-references **9 data sources** with **63 tools**, **18 detection patterns**, and interactive D3 visualizations.
+An [MCP server](https://modelcontextprotocol.io/) that cross-references **9 public data sources** with **63 tools**, **18 detection patterns**, and interactive D3 visualizations.
 
 ![Network Graph](docs/images/network-graph.png)
 

@@ -26,7 +26,7 @@ class WikidataClient:
         self._client = httpx.AsyncClient(
             timeout=timeout,
             headers={
-                "User-Agent": "sift/0.4.0 (investigative journalism tool)",
+                "User-Agent": "sift/0.4.0",
                 "Accept": "application/json",
             },
         )

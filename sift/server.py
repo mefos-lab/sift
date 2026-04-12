@@ -1,4 +1,4 @@
-"""Sift — MCP server for investigative journalism and financial crime research."""
+"""Sift — MCP server for cross-referencing public financial and corporate data."""
 
 import json
 import os
