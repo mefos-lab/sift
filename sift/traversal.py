@@ -129,13 +129,16 @@ async def traverse(
 
     # ── Helper: ingest raw results into graph ───────────────
 
-    def _ingest_icij(res, hop: int):
+    def _ingest_icij(res, hop: int, min_score: float = 60.0):
         if not res:
             return
         for r in res.get("result", [])[:10]:
+            score = r.get("score", 0)
+            if score < min_score:
+                continue
             nid = f"icij-{r['id']}"
             _add_node(nid, "icij", r["name"], _icij_type(r), hop, {
-                "score": r.get("score"),
+                "score": score,
                 "investigation": _inv_from_desc(r.get("description", "")),
                 "description": r.get("description", ""),
             })
@@ -386,7 +389,7 @@ async def traverse(
                         for aid, br_res in zip(bridge_ids, bridge_results):
                             if br_res:
                                 for br in br_res.get("result", [])[:5]:
-                                    if br.get("score", 0) > 50:
+                                    if br.get("score", 0) >= 60:
                                         bid = f"icij-{br['id']}"
                                         _add_node(bid, "icij", br["name"],
                                                   _icij_type(br), hop, {
@@ -397,7 +400,10 @@ async def traverse(
                                         _add_edge(aid, bid, "cross-reference", hop)
 
             # ── ICIJ: get_node details + reconcile + OS cross-bridge ──
-            if fnode.source in ("icij", "both") and fnode.id.startswith("icij-"):
+            # Skip address nodes — re-searching "123 MAIN ST, ST. THOMAS"
+            # generates noise and can trigger ICIJ 500s on long strings
+            if (fnode.source in ("icij", "both") and fnode.id.startswith("icij-")
+                    and fnode.node_type != "Address"):
                 node_id = int(fnode.id[5:])
                 fname = fnode.label
                 fnorm = _normalize(fname)
@@ -434,6 +440,8 @@ async def traverse(
                     icij_res2 = parallel_results[idx]; idx += 1
                     if icij_res2:
                         for r in icij_res2.get("result", [])[:8]:
+                            if r.get("score", 0) < 60:
+                                continue
                             rid = f"icij-{r['id']}"
                             if rid == fnode.id:
                                 continue
