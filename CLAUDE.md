@@ -196,6 +196,16 @@ The value is the minimum seconds between requests. When a service
 name isn't in the dict, no throttling is applied — so always add
 new services here.
 
+## Contributing
+
+Contributors should set a repo-specific git identity before
+committing to keep personal information out of the history:
+
+```bash
+git config user.name "your-handle"
+git config user.email "your-anonymous-email"
+```
+
 ## Debugging API Errors
 
 When an external API returns errors (500, 502, etc.), investigate

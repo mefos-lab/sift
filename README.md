@@ -259,6 +259,16 @@ The architecture supports adding additional data sources as new clients and tool
 
 MIT — see [LICENSE](LICENSE).
 
+## Contributing
+
+If you'd like to contribute, consider setting a repo-specific git
+identity to keep your personal information out of the commit history:
+
+```bash
+git config user.name "your-handle"
+git config user.email "your-anonymous-email"
+```
+
 ## Acknowledgements
 
 This tool is built on the extraordinary work of:

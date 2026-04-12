@@ -8,3 +8,4 @@ build/
 .claude/settings.local.json
 investigations/
 test
+x
