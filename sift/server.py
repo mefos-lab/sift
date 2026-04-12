@@ -18,6 +18,7 @@ from .courtlistener_client import CourtListenerClient
 from .aleph_client import AlephClient
 from .land_registry_client import LandRegistryClient
 from .wikidata_client import WikidataClient
+from .errors import ServiceTracker, api_call
 from .traversal import traverse, result_to_visualizer_data
 from .export import export_json, export_markdown
 from .query_router import route_query
@@ -2019,6 +2020,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         elif name == "ownership_trace":
             company = arguments["company"]
             lei = arguments.get("lei")
+            ot_tracker = ServiceTracker()
 
             # Step 1: Find LEI
             if not lei:
@@ -2058,19 +2060,23 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     entry["role"] = "subsidiary"
 
                 # Get entity details
-                try:
-                    details = await gleif_client.get_lei(chain_lei)
+                details = await api_call(
+                    ot_tracker, "GLEIF", "/lei",
+                    lambda l=chain_lei: gleif_client.get_lei(l))
+                if details:
                     entry["legal_name"] = details.get("legal_name", "")
                     entry["jurisdiction"] = details.get("jurisdiction", "")
                     entry["country"] = details.get("country", "")
                     entry["status"] = details.get("status", "")
-                except Exception:
+                else:
                     entry["legal_name"] = chain_lei
 
                 # Cross-reference against ICIJ
                 entity_name = entry.get("legal_name", chain_lei)
-                try:
-                    icij_res = await icij_client.reconcile(query=entity_name)
+                icij_res = await api_call(
+                    ot_tracker, "ICIJ", "/reconcile",
+                    lambda n=entity_name: icij_client.reconcile(query=n))
+                if icij_res:
                     icij_matches = [r for r in icij_res.get("result", [])[:3]
                                     if r.get("score", 0) > 50]
                     if icij_matches:
@@ -2079,17 +2085,17 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                             "id": m["id"],
                             "type": m.get("types", [{}])[0].get("name", ""),
                         } for m in icij_matches]
-                except Exception:
-                    pass
 
                 # Cross-reference against OpenSanctions
                 if os_client:
-                    try:
-                        os_res = await os_client.match(
+                    os_res = await api_call(
+                        ot_tracker, "OpenSanctions", "/match",
+                        lambda n=entity_name: os_client.match(
                             queries={"q0": {"schema": "LegalEntity",
-                                            "properties": {"name": [entity_name]}}},
+                                            "properties": {"name": [n]}}},
                             threshold=0.7,
-                        )
+                        ))
+                    if os_res:
                         os_matches = []
                         for qv in os_res.get("responses", {}).values():
                             for r in qv.get("results", [])[:3]:
@@ -2103,8 +2109,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                                     })
                         if os_matches:
                             entry["sanctions_matches"] = os_matches
-                    except Exception:
-                        pass
 
                 chain.append(entry)
 
@@ -2122,6 +2126,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "sanctions_exposure": any("sanctions_matches" in e for e in chain),
                 },
             }
+            if ot_tracker.warnings:
+                result["service_warnings"] = ot_tracker.warnings
 
         elif name == "beneficial_owner":
             if ch_client is None:
@@ -2447,6 +2453,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 result["pruned_nodes"] = traversal_result.pruned
             if traversal_result.pattern_matches:
                 result["pattern_matches"] = traversal_result.pattern_matches
+            if traversal_result.service_warnings:
+                result["service_warnings"] = traversal_result.service_warnings
 
             # Save for export
             _last_investigation = result

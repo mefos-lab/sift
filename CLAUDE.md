@@ -142,6 +142,60 @@ CourtListener, and OCCRP Aleph are optional — if keys are missing,
 those sources still work (Aleph has public access) or are silently
 skipped.
 
+## Error Handling
+
+All external API calls MUST use `api_call()` from `sift/errors.py`.
+Never use bare `try/except` around HTTP calls — the shared handler
+provides consistent error tracking and surfaces warnings to users.
+
+```python
+from sift.errors import ServiceTracker, api_call
+
+tracker = ServiceTracker()
+
+# Pass a lambda so the call can be retried on transient errors
+# (HTTP 429/500/502/503/504, timeouts, connection failures).
+# Up to 3 total attempts (1 + 2 retries) with exponential backoff.
+result = await api_call(tracker, "ICIJ", "/reconcile",
+                        lambda: icij_client.reconcile(query=name))
+
+# At the end, attach warnings to the response:
+if tracker.warnings:
+    result["service_warnings"] = tracker.warnings
+```
+
+When a service fails, the traversal continues with remaining sources
+and the response includes `service_warnings` like:
+`"ICIJ (/reconcile) is returning errors, skipping for now (3 failures) — HTTP 500"`
+
+**Important**: Always pass a `lambda` (not a bare coroutine) to
+`api_call` so retries work. In loop bodies, capture loop variables
+with default args: `lambda n=name: client.search(n)`.
+
+### Rate limits
+
+`api_call()` enforces per-service rate limits automatically via
+`SERVICE_RATE_LIMITS` in `sift/errors.py`. When adding a new data
+source, look up its documented rate limit and add an entry:
+
+```python
+SERVICE_RATE_LIMITS: dict[str, float] = {
+    "ICIJ":             0.25,   # 4 req/s   (undocumented — polite)
+    "OpenSanctions":    0.20,   # 5 req/s   (monthly quota only)
+    "GLEIF":            1.00,   # 1 req/s   (60/min documented)
+    "SEC EDGAR":        0.12,   # ~8 req/s  (10/s documented)
+    "Companies House":  0.50,   # 2 req/s   (600/5min documented)
+    "CourtListener":    0.75,   # ~1.3 req/s (5000/hr documented)
+    "Aleph":            2.00,   # 0.5 req/s (30/min anon documented)
+    "Wikidata":         0.50,   # 2 req/s   (conservative)
+    "Land Registry":    0.50,   # 2 req/s   (undocumented — conservative)
+}
+```
+
+The value is the minimum seconds between requests. When a service
+name isn't in the dict, no throttling is applied — so always add
+new services here.
+
 ## Conventions
 
 - All investigation output uses professional, factual language
