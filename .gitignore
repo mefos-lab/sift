@@ -5,6 +5,5 @@ dist/
 build/
 .venv/
 .env
-investigations/*.html
-investigations/*.json
-investigations/*.md
+.claude/settings.local.json
+investigations/
