@@ -24,7 +24,7 @@ enrichment and PEP identification).
 | SEC EDGAR | US public company filings, 10-K/10-Q/8-K | User-Agent only |
 | UK Companies House | UK company records, officers, PSC (beneficial ownership) | Free API key |
 | CourtListener | US federal court records (PACER/RECAP) | Free token |
-| OCCRP Aleph | Investigative datasets, company records, leaked documents | Optional API key |
+| OCCRP Aleph | Investigative datasets, company records, leaked documents | Approved account required |
 | UK Land Registry | Property transaction prices and addresses (England/Wales) | None |
 | Wikidata | Structured data on people, companies, political roles | None |
 
