@@ -48,10 +48,12 @@ OPENSANCTIONS_API_KEY=<your-key>          # Required — free at opensanctions.o
 SEC_EDGAR_USER_AGENT=sift contact@you.com # Required for SEC — any name + email
 COMPANIES_HOUSE_API_KEY=<your-key>        # Optional — free at developer.company-information.service.gov.uk
 COURTLISTENER_API_TOKEN=<your-token>      # Optional — free at courtlistener.com
-ALEPH_API_KEY=<your-key>                  # Optional — free at aleph.occrp.org
+ALEPH_API_KEY=<your-key>                  # Optional — requires approved account (see below)
 ```
 
-ICIJ, GLEIF, UK Land Registry, and Wikidata work without keys. OpenSanctions requires a free API key. The remaining sources are optional — if keys are missing, those sources are silently skipped.
+ICIJ, GLEIF, UK Land Registry, and Wikidata work without keys. OpenSanctions requires a free API key. Companies House and CourtListener keys are free and self-service.
+
+**Aleph note**: OCCRP Aleph requires a manually approved account. Apply at their [service portal](https://occrp.atlassian.net/servicedesk/customer/portal/14). Until approved, Aleph tools return empty results and the other 8 sources work normally.
 
 ## Examples
 
@@ -126,7 +128,7 @@ Runs a single unified traversal with both names as seeds, then identifies **conn
 
 Checks for new sanctions listings since a specific date. Returns any additions, modifications, or status changes. Useful for ongoing monitoring of previously screened subjects.
 
-### Jurisdictional footprint
+### Example: Jurisdictional footprint
 
 ```
 /investigate <name> --jurisdiction
@@ -134,7 +136,7 @@ Checks for new sanctions listings since a specific date. Returns any additions, 
 
 Groups all findings by jurisdiction and profiles each one — secrecy rankings, sanctions exposure, and cross-reference overlap. Reveals whether an entity's jurisdictional spread follows patterns associated with regulatory arbitrage.
 
-### Pattern analysis
+### Example: Pattern analysis
 
 ```
 /investigate <name> --patterns
@@ -207,7 +209,7 @@ See the [Gallery](docs/gallery.md) for annotated screenshots of all views.
 | [SEC EDGAR](https://www.sec.gov/edgar) | US public company filings, 10-K/10-Q/8-K | User-Agent | 8 |
 | [UK Companies House](https://developer-specs.company-information.service.gov.uk/) | UK company records, officers, beneficial ownership (PSC) | Free API key | 7 |
 | [CourtListener](https://www.courtlistener.com/) | US federal court records (PACER/RECAP) | Free token | 6 |
-| [OCCRP Aleph](https://aleph.occrp.org/) | Investigative datasets, company records, leaked documents | Optional API key | 4 |
+| [OCCRP Aleph](https://aleph.occrp.org/) | Investigative datasets, company records, leaked documents | Approved account required | 4 |
 | [UK Land Registry](https://landregistry.data.gov.uk/) | Property transaction prices (England/Wales) | None | 2 |
 | [Wikidata](https://www.wikidata.org/) | Structured data on people, companies, political roles | None | 7 |
 
