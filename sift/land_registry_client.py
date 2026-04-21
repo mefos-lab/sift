@@ -229,15 +229,26 @@ ORDER BY ASC(?year)
         town: str,
         min_price: int = 1_000_000,
         limit: int = 20,
+        date_from: str | None = None,
+        date_to: str | None = None,
     ) -> dict[str, Any]:
         """Search for high-value property transactions in a town.
 
         High-value purchases are a key money laundering indicator.
+
+        date_from/date_to: ISO dates (e.g. '2025-01-01') for transaction
+            date range filtering.
         """
         safe_town = town.replace("'", "\\'").upper()
+        date_filters = ""
+        if date_from:
+            date_filters += f'\n    FILTER(?date >= "{date_from}"^^xsd:date)'
+        if date_to:
+            date_filters += f'\n    FILTER(?date <= "{date_to}"^^xsd:date)'
         sparql = f"""
 PREFIX lrppi: <http://landregistry.data.gov.uk/def/ppi/>
 PREFIX lrcommon: <http://landregistry.data.gov.uk/def/common/>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
 SELECT ?transaction ?amount ?date ?paon ?saon ?street ?town ?county ?postcode ?type
 WHERE {{
@@ -252,9 +263,9 @@ WHERE {{
     OPTIONAL {{ ?addr lrcommon:county ?county }}
     ?addr lrcommon:postcode ?postcode .
     FILTER(UCASE(?town) = '{safe_town}')
-    FILTER(?amount >= {min_price})
+    FILTER(?amount >= {min_price}){date_filters}
 }}
-ORDER BY DESC(?amount)
+ORDER BY DESC(?date)
 LIMIT {limit}
 """
         resp = await self._client.get(

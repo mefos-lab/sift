@@ -565,6 +565,14 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Filter by entity category (e.g. 'GENERAL', 'FUND', 'BRANCH')",
                     },
+                    "created_since": {
+                        "type": "string",
+                        "description": "Only entities created after this ISO date (e.g. '2024-01-01')",
+                    },
+                    "sort": {
+                        "type": "string",
+                        "description": "Sort field, e.g. '-entity.creationDate' (descending) or '-registration.initialRegistrationDate'",
+                    },
                 },
                 "required": ["query"],
             },
@@ -1068,6 +1076,60 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["query"],
+            },
+        ),
+
+        Tool(
+            name="uk_advanced_search",
+            description=(
+                "Advanced UK company search with date range filters. More "
+                "powerful than basic search — filter by incorporation date, "
+                "dissolution date, company status, and type. Use this to find "
+                "recently dissolved companies, short-lived entities, or "
+                "recently incorporated companies."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "company_status": {
+                        "type": "string",
+                        "enum": ["active", "dissolved", "liquidation",
+                                 "receivership", "converted-closed",
+                                 "voluntary-arrangement", "insolvency-proceedings",
+                                 "administration", "open", "closed"],
+                        "description": "Filter by company status",
+                    },
+                    "incorporated_from": {
+                        "type": "string",
+                        "description": "Incorporated after this ISO date (e.g. '2024-01-01')",
+                    },
+                    "incorporated_to": {
+                        "type": "string",
+                        "description": "Incorporated before this ISO date",
+                    },
+                    "dissolved_from": {
+                        "type": "string",
+                        "description": "Dissolved after this ISO date",
+                    },
+                    "dissolved_to": {
+                        "type": "string",
+                        "description": "Dissolved before this ISO date",
+                    },
+                    "company_type": {
+                        "type": "string",
+                        "description": "Company type filter (e.g. 'ltd', 'llp', 'plc')",
+                    },
+                    "size": {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Max results (default 10)",
+                    },
+                    "start_index": {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Pagination offset (default 0)",
+                    },
+                },
             },
         ),
 
@@ -1735,6 +1797,14 @@ async def list_tools() -> list[Tool]:
                         "default": 20,
                         "description": "Max results (default 20)",
                     },
+                    "date_from": {
+                        "type": "string",
+                        "description": "Only transactions after this ISO date (e.g. '2025-01-01')",
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "Only transactions before this ISO date",
+                    },
                 },
                 "required": ["town"],
             },
@@ -2062,7 +2132,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     _ch_tools = {"uk_search", "uk_company", "uk_officer_appointments",
                  "uk_filing_history", "uk_accounts", "uk_charges",
                  "uk_confirmation_status", "uk_disqualified",
-                 "uk_insolvency", "uk_dissolved_search"}
+                 "uk_insolvency", "uk_dissolved_search",
+                 "uk_advanced_search"}
     _cl_tools = {"court_search", "court_docket", "court_docket_entries",
                  "court_parties", "court_complaint", "court_docket_detail",
                  "court_opinion", "court_judge", "court_bankruptcy"}
@@ -2245,6 +2316,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 entity_status=arguments.get("entity_status"),
                 legal_form=arguments.get("legal_form"),
                 category=arguments.get("category"),
+                created_since=arguments.get("created_since"),
+                sort=arguments.get("sort"),
             )
 
         elif name == "gleif_entity":
@@ -2371,6 +2444,18 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "uk_insolvency":
             result = await ch_client.get_insolvency(arguments["company_number"])
+
+        elif name == "uk_advanced_search":
+            result = await ch_client.advanced_search(
+                company_status=arguments.get("company_status"),
+                incorporated_from=arguments.get("incorporated_from"),
+                incorporated_to=arguments.get("incorporated_to"),
+                dissolved_from=arguments.get("dissolved_from"),
+                dissolved_to=arguments.get("dissolved_to"),
+                company_type=arguments.get("company_type"),
+                size=arguments.get("size", 10),
+                start_index=arguments.get("start_index", 0),
+            )
 
         elif name == "uk_dissolved_search":
             result = await ch_client.search_dissolved(
@@ -2525,6 +2610,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 town=arguments["town"],
                 min_price=arguments.get("min_price", 1_000_000),
                 limit=arguments.get("limit", 20),
+                date_from=arguments.get("date_from"),
+                date_to=arguments.get("date_to"),
             )
 
         # =============================================================

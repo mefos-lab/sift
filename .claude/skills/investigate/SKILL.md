@@ -892,18 +892,14 @@ otherwise.
 
 Find short-lived UK companies with suspicious characteristics.
 
-Search term rotation: cycle through these on each run, tracked
-in scan history metadata as `search_term_index`:
-`["services", "trading", "consulting", "properties", "management",
-"holdings", "solutions", "enterprises"]`
-
 1. Read scan history: `scan_history_read(scan_type="rapid-dissolution")`.
-   Get `search_term_index` from `last_metadata` (default 0).
-   Pick the next search term from the rotation list.
-2. `uk_dissolved_search(query=<search_term>,
-   start_index=<last_offset.companies_house or 0>)` (1 call).
-   From results, prioritize companies dissolved within the last
-   2 years (compare dissolution_date to today).
+2. `uk_advanced_search(company_status="dissolved",
+   dissolved_from="<6 months ago>",
+   incorporated_from="<3 years ago>",
+   size=10,
+   start_index=<last_offset.companies_house or 0>)` — find
+   recently dissolved companies that were also recently
+   incorporated, i.e. short-lived entities (1 call).
 3. For each result NOT in prior seeds:
    `uk_company(company_number=number)` to get
    incorporation/dissolution dates and officer info
@@ -936,8 +932,12 @@ either one or sanctioned, MEDIUM otherwise.
 Find UK LLPs with opaque corporate partners.
 
 1. Read scan history: `scan_history_read(scan_type="llp-opacity")`.
-2. `uk_search(query="LLP", type="company", items_per_page=10,
-   start_index=<last_offset.companies_house or 0>)` (1 call).
+2. `uk_advanced_search(company_type="llp",
+   company_status="active",
+   incorporated_from="<2 years ago>",
+   size=10,
+   start_index=<last_offset.companies_house or 0>)` — recently
+   incorporated active LLPs (1 call).
 3. For each LLP NOT in prior seeds:
    `uk_company(company_number=number)` to get partner types
    and jurisdictions (up to 15 calls).
@@ -967,8 +967,10 @@ each run, tracked in scan history metadata as `jurisdiction_index`:
 1. Read scan history: `scan_history_read(scan_type="beneficial-ownership-gap")`.
    Get `jurisdiction_index` from `last_metadata` (default 0).
    Pick the next jurisdiction from the rotation list.
-2. `gleif_search(query="", jurisdiction=<jurisdiction>)` — search
-   for active entities in the chosen secrecy jurisdiction
+2. `gleif_search(query="", jurisdiction=<jurisdiction>,
+   created_since="<1 year ago>",
+   sort="-entity.creationDate")` — search for recently created
+   entities in the chosen secrecy jurisdiction, newest first
    (up to 5 calls).
 3. For each entity NOT in prior seeds:
    `gleif_ownership(lei=lei)` to trace parent/UBO chain
@@ -1040,18 +1042,12 @@ be fronting for others or continuing fraud through new vehicles.
 
 Find dissolved companies reborn at the same address.
 
-Search term rotation: same list as rapid-dissolution, tracked
-in scan history metadata as `search_term_index`:
-`["services", "trading", "consulting", "properties", "management",
-"holdings", "solutions", "enterprises"]`
-
 1. Read scan history: `scan_history_read(scan_type="phoenix-company")`.
-   Get `search_term_index` from `last_metadata` (default 0).
-   Pick the next search term from the rotation list.
-2. `uk_dissolved_search(query=<search_term>,
-   start_index=<last_offset.companies_house or 0>)` — dissolved
-   companies (1 call). Prioritize those dissolved within the
-   last 2 years.
+2. `uk_advanced_search(company_status="dissolved",
+   dissolved_from="<6 months ago>",
+   size=10,
+   start_index=<last_offset.companies_house or 0>)` — recently
+   dissolved companies (1 call).
 3. For each NOT in prior seeds (up to 10):
    `uk_company(company_number)` — get address, directors,
    dates (up to 10 calls).
@@ -1086,8 +1082,10 @@ Find high-value property purchases with offshore ownership.
 
 1. Read scan history: `scan_history_read(scan_type="property-layering")`.
 2. `land_high_value(town="LONDON", min_price=5000000,
-   limit=10)` + `land_high_value(town="MANCHESTER",
-   min_price=2000000, limit=5)` (2 calls).
+   limit=10, date_from="<1 year ago>")` +
+   `land_high_value(town="MANCHESTER",
+   min_price=2000000, limit=5, date_from="<1 year ago>")`
+   — recent high-value transactions only (2 calls).
 3. For each address NOT in prior seeds:
    `uk_search(query=address_snippet, type="company")` —
    companies at that address (up to 15 calls).

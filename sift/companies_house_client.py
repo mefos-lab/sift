@@ -222,6 +222,47 @@ class CompaniesHouseClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def advanced_search(
+        self,
+        company_status: str | None = None,
+        incorporated_from: str | None = None,
+        incorporated_to: str | None = None,
+        dissolved_from: str | None = None,
+        dissolved_to: str | None = None,
+        company_type: str | None = None,
+        sic_codes: str | None = None,
+        size: int = 10,
+        start_index: int = 0,
+    ) -> dict[str, Any]:
+        """Advanced company search with date range filters.
+
+        Supports filtering by incorporation/dissolution date ranges,
+        company status, and type. More powerful than basic search for
+        finding recently dissolved or recently incorporated companies.
+        """
+        params: dict[str, Any] = {"size": size}
+        if start_index:
+            params["start_index"] = start_index
+        if company_status:
+            params["company_status"] = company_status
+        if incorporated_from:
+            params["incorporated_from"] = incorporated_from
+        if incorporated_to:
+            params["incorporated_to"] = incorporated_to
+        if dissolved_from:
+            params["dissolved_from"] = dissolved_from
+        if dissolved_to:
+            params["dissolved_to"] = dissolved_to
+        if company_type:
+            params["company_type"] = company_type
+        if sic_codes:
+            params["sic_codes"] = sic_codes
+        resp = await self._client.get(
+            "/advanced-search/companies", params=params,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def get_confirmation_statements(
         self, company_number: str,
     ) -> dict[str, Any]:

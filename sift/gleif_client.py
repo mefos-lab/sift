@@ -34,11 +34,18 @@ class GLEIFClient:
         entity_status: str | None = None,
         legal_form: str | None = None,
         category: str | None = None,
+        created_since: str | None = None,
+        sort: str | None = None,
     ) -> dict[str, Any]:
         """Full-text search for LEI records by company name.
 
         Optional filters narrow results by jurisdiction (e.g. 'US-DE', 'GB'),
         entity status ('ACTIVE', 'INACTIVE'), legal form ID, or category.
+
+        created_since: ISO date (e.g. '2024-01-01') — only entities created
+            after this date.
+        sort: sort field, e.g. '-entity.creationDate' (descending) or
+            '-registration.initialRegistrationDate'.
         """
         params: dict[str, Any] = {
             "filter[fulltext]": query,
@@ -52,6 +59,10 @@ class GLEIFClient:
             params["filter[entity.legalForm.id]"] = legal_form
         if category:
             params["filter[entity.category]"] = category
+        if created_since:
+            params["filter[entity.creationDate]"] = f">{created_since}"
+        if sort:
+            params["sort"] = sort
         resp = await self._client.get("/lei-records", params=params)
         resp.raise_for_status()
         raw = resp.json()
