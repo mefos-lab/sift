@@ -46,6 +46,7 @@ class CourtListenerClient:
         filed_after: str | None = None,
         filed_before: str | None = None,
         nature_of_suit: str | None = None,
+        order_by: str | None = None,
         page: int = 1,
     ) -> dict[str, Any]:
         """Search court opinions (type='o') or docket entries (type='r').
@@ -54,10 +55,11 @@ class CourtListenerClient:
         ----------
         query : Search terms
         type : 'o' for opinions, 'r' for RECAP dockets
-        court : Court ID filter (optional)
+        court : Court ID filter, space-separated (e.g. 'nysb deb casb')
         filed_after : ISO date (optional)
         filed_before : ISO date (optional)
-        nature_of_suit : Nature of suit code for filtering (e.g. '422' for bankruptcy)
+        nature_of_suit : Nature of suit code for filtering (optional)
+        order_by : Sort order (e.g. 'dateFiled desc', 'dateFiled asc')
         """
         params: dict[str, Any] = {"q": query, "type": type, "page": page}
         if court:
@@ -68,6 +70,8 @@ class CourtListenerClient:
             params["filed_before"] = filed_before
         if nature_of_suit:
             params["nature_of_suit"] = nature_of_suit
+        if order_by:
+            params["order_by"] = order_by
 
         resp = await self._client.get("/search/", params=params)
         resp.raise_for_status()

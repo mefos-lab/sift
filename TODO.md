@@ -104,6 +104,11 @@ Use the agent's judgment for fuzzy matching decisions the normalizer can't make.
 - ~~background_check phase 2 enrichment~~ ✓ insolvency, disqualified, amendments, 8-K, bankruptcy
 - ~~ownership_trace full tree~~ ✓ uses `get_all_relationships`
 
+## ~~CourtListener Bankruptcy Search Fix~~ ✓
+- ~~`court_bankruptcy` returns appeals, not petitions~~ ✓ Fixed: searches bankruptcy court IDs directly instead of using nature_of_suit codes
+- ~~Filters by actual bankruptcy courts (nysb, deb, casb, etc.)~~ ✓
+- ~~Results sorted by dateFiled desc, chapter field available for client-side filtering~~ ✓
+
 ## Viewer Improvements (remaining)
 - Inline entity links from narrative counts to entity index
 - End-to-end test of skill-generated next steps
