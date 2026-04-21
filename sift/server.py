@@ -272,6 +272,10 @@ async def list_tools() -> list[Tool]:
                         "default": True,
                         "description": "Toggle fuzzy matching (default true)",
                     },
+                    "sort": {
+                        "type": "string",
+                        "description": "Sort field and order, e.g. 'properties.createdAt:desc' for most recently designated first, 'first_seen:desc' for most recently indexed (optional)",
+                    },
                 },
                 "required": ["query"],
             },
@@ -1230,20 +1234,29 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="court_bankruptcy",
             description=(
-                "Search for bankruptcy cases. Optionally filter by "
-                "chapter (7=liquidation, 11=reorganization, 13=individual)."
+                "Search for bankruptcy petitions filed in US bankruptcy "
+                "courts. Returns actual case filings (not appeals or "
+                "opinions). Results include chapter, parties, and court."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Company or person name to search for bankruptcy cases",
+                        "description": "Company or person name to search for bankruptcy cases (use empty string for untargeted search)",
                     },
                     "chapter": {
                         "type": "string",
                         "enum": ["7", "11", "13"],
-                        "description": "Bankruptcy chapter to filter by",
+                        "description": "Bankruptcy chapter to filter by (optional — filters results client-side)",
+                    },
+                    "filed_after": {
+                        "type": "string",
+                        "description": "Only return cases filed after this ISO date (e.g. 2025-01-01)",
+                    },
+                    "filed_before": {
+                        "type": "string",
+                        "description": "Only return cases filed before this ISO date",
                     },
                 },
                 "required": ["query"],
@@ -2143,6 +2156,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 changed_since=arguments.get("changed_since"),
                 datasets=arguments.get("datasets"),
                 fuzzy=arguments.get("fuzzy", True),
+                sort=arguments.get("sort"),
             )
 
         elif name == "sanctions_match":
@@ -2406,14 +2420,25 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 result = {"error": "Provide either 'query' or 'person_id'"}
 
         elif name == "court_bankruptcy":
-            # Map chapter to nature_of_suit codes
-            chapter_codes = {"7": "422", "11": "423", "13": "424"}
-            nos = chapter_codes.get(arguments.get("chapter", ""))
-            result = await cl_client.search(
+            # Search bankruptcy courts directly (not district courts)
+            # Major bankruptcy court IDs — covers high-volume jurisdictions
+            bk_courts = "nysb nyeb nynb casb caeb canb casd deb flsb flmb txsb txnb txeb txwb ilnb njb pab mab"
+            raw = await cl_client.search(
                 query=arguments["query"],
                 type="r",
-                nature_of_suit=nos,
+                court=bk_courts,
+                filed_after=arguments.get("filed_after"),
+                filed_before=arguments.get("filed_before"),
+                order_by="dateFiled desc",
             )
+            # Client-side chapter filter if requested
+            chapter = arguments.get("chapter")
+            if chapter and raw.get("results"):
+                raw["results"] = [
+                    r for r in raw["results"]
+                    if str(r.get("chapter", "")) == chapter
+                ]
+            result = raw
 
         # =============================================================
         # OCCRP Aleph tools

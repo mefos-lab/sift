@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   queries; rotate search terms for dissolved company scans
 - Versioning system with CHANGELOG and bump script
 - Version reported in HTML visualizations, JSON exports, and Markdown reports
+- OpenSanctions `sort` parameter — enables `properties.createdAt:desc` to find
+  recently designated entities instead of perennial top-10 names
+
+### Fixed
+- Sanctions-evasion scan now surfaces genuinely recent designations (days old)
+  instead of Gaddafi/Al-Qaeda by using server-side sort on designation date
+- `court_bankruptcy` now searches actual bankruptcy courts (nysb, deb, casb, etc.)
+  instead of using nature_of_suit codes that returned appeals from district courts
 
 ### Changed
 - Centralized version string in `sift/__init__.py` (was hardcoded in 8 client files)

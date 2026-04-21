@@ -40,6 +40,7 @@ class OpenSanctionsClient:
         offset: int = 0,
         fuzzy: bool = True,
         changed_since: str | None = None,
+        sort: str | None = None,
     ) -> dict[str, Any]:
         """Full-text search with faceted filtering."""
         params: dict[str, Any] = {
@@ -58,6 +59,8 @@ class OpenSanctionsClient:
             params["datasets"] = datasets
         if changed_since:
             params["changed_since"] = changed_since
+        if sort:
+            params["sort"] = sort
 
         resp = await self._client.get(f"/search/{dataset}", params=params)
         resp.raise_for_status()

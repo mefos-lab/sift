@@ -779,11 +779,16 @@ instruction says "90 days ago", use "2026-01-19".
 Find sanctioned persons who appear in ICIJ offshore leaks.
 
 1. Read scan history: `scan_history_read(scan_type="sanctions-evasion")`.
-2. `sanctions_search(query="", topics=["sanction"], limit=20,
-   offset=<last_offset.opensanctions or 0>,
-   changed_since="<90 days ago>")` — prefer recently listed
-   sanctions, page forward on each run (1 call).
-3. For the top 10 sanctioned persons NOT in prior seeds
+2. `sanctions_search(query="", topics=["sanction"], schema="Person",
+   sort="properties.createdAt:desc", limit=20,
+   offset=<last_offset.opensanctions or 0>)` — fetch sanctioned
+   persons sorted by designation date, most recent first (1 call).
+   The `sort` parameter is critical: without it, the API returns
+   perennial top-10 names (Gaddafi, Al-Qaeda) regardless of other
+   filters. With it, results are genuinely recent designations
+   (days/weeks old) that are far more likely to have undiscovered
+   offshore connections.
+3. For the top 10 recently designated persons NOT in prior seeds
    (prioritize those with `crime.fin` or `crime` topics):
    `icij_search(query=sanctioned_name)` (up to 10 calls).
 4. For each ICIJ hit: `icij_investigate(name=match_name,
@@ -808,10 +813,10 @@ HIGH if through intermediary.
 Find PEP family members hiding behind offshore structures.
 
 1. Read scan history: `scan_history_read(scan_type="pep-opacity")`.
-2. `sanctions_search(query="", topics=["role.rca"], limit=20,
-   offset=<last_offset.opensanctions or 0>,
-   changed_since="<90 days ago>")` — prefer recently flagged
-   PEP associates, page forward on each run (1 call).
+2. `sanctions_search(query="", topics=["role.rca"],
+   sort="properties.createdAt:desc", limit=20,
+   offset=<last_offset.opensanctions or 0>)` — PEP associates
+   sorted by designation date, most recent first (1 call).
 3. For the top 10 `role.rca` entries NOT in prior seeds, with
    known `wikidataId`:
    `wikidata_family(entity_id)` to get family member names
@@ -1248,11 +1253,15 @@ Budget: [used]/[allocated] calls
 
 #### Finding 1: [entity/person name] — [CRITICAL/HIGH/MEDIUM]
 
+**Designated**: [YYYY-MM-DD] (from `properties.createdAt`)
+**Datasets**: [N] lists (e.g. us_ofac_sdn, eu_fsf, ...)
+**First indexed**: [YYYY-MM-DD] (from `first_seen`)
+
 **Evidence**: [specific findings — names, node IDs, relationships]
 
 **Chain**:
-> [Person A] → *officer of* → [Entity B] (BVI)
-> → *intermediary* → [Firm C] (Panama)
+> [Person A] → *officer of* → [Entity B] (BVI, incorporated [date])
+> → *intermediary* → [Firm C] (Panama, incorporated [date])
 
 **Jurisdictions**: [list]
 **Pattern**: [pattern name from INDEX.yaml]
