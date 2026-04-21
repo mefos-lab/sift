@@ -651,9 +651,13 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Comma-separated form types to filter (e.g. '10-K,8-K,DEF 14A')",
                     },
-                    "date_range": {
+                    "start_date": {
                         "type": "string",
-                        "description": "Date range as 'YYYY-MM-DD,YYYY-MM-DD' (optional)",
+                        "description": "Only filings after this ISO date (e.g. '2025-01-01')",
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "Only filings before this ISO date",
                     },
                     "count": {
                         "type": "integer",
@@ -2336,7 +2340,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = await sec_client.search(
                 query=arguments["query"],
                 forms=arguments.get("forms"),
-                date_range=arguments.get("date_range"),
+                start_date=arguments.get("start_date"),
+                end_date=arguments.get("end_date"),
                 count=arguments.get("count", 10),
                 start=arguments.get("start", 0),
             )

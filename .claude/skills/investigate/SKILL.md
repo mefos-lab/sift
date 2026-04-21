@@ -1116,10 +1116,12 @@ Find public companies with excessive filing amendments.
 1. Read scan history: `scan_history_read(scan_type="sec-amendment-cluster")`.
 2. `sec_search(query="10-K/A", count=10,
    start=<last_offset.sec or 0>,
-   date_range="[<1 year ago> TO <today>]")` +
+   start_date="<1 year ago>", end_date="<today>")` +
    `sec_search(query="10-Q/A", count=10,
-   date_range="[<1 year ago> TO <today>]")` — find recent
-   amendments only (2 calls).
+   start_date="<1 year ago>", end_date="<today>")` — find
+   recent amendments only (2 calls). Note: use start_date/
+   end_date, NOT date_range (EDGAR ignores Elasticsearch-style
+   range syntax).
 3. For each amending company NOT in prior seeds (up to 8 unique
    CIKs): `sec_amendments(cik)` — full history (up to 8 calls).
 4. For companies with 3+ amendments: `sec_8k(cik, limit=3)` —
@@ -1151,7 +1153,7 @@ Find companies with rapid executive departures.
 1. Read scan history: `scan_history_read(scan_type="sec-officer-churn")`.
 2. `sec_search(query="8-K", forms=["8-K"], count=20,
    start=<last_offset.sec or 0>,
-   date_range="[<6 months ago> TO <today>]")` —
+   start_date="<6 months ago>", end_date="<today>")` —
    recent 8-K filings only (1 call).
 3. For each NOT in prior seeds (up to 15):
    `sec_8k(cik, limit=5)` — extract Item 5.02 (officer

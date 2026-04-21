@@ -61,10 +61,18 @@ class SECEdgarClient:
         query: str,
         forms: str | None = None,
         date_range: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
         count: int = 10,
         start: int = 0,
     ) -> dict[str, Any]:
-        """Full-text search across SEC filings."""
+        """Full-text search across SEC filings.
+
+        For date filtering, use start_date/end_date (ISO dates like
+        '2025-01-01'). The date_range parameter is kept for backward
+        compatibility but EDGAR silently ignores Elasticsearch-style
+        range syntax — use start_date/end_date instead.
+        """
         await self._rate_limit()
         params: dict[str, Any] = {
             "q": query,
@@ -73,7 +81,13 @@ class SECEdgarClient:
         }
         if forms:
             params["forms"] = forms
-        if date_range:
+        if start_date or end_date:
+            params["dateRange"] = "custom"
+            if start_date:
+                params["startdt"] = start_date
+            if end_date:
+                params["enddt"] = end_date
+        elif date_range:
             params["dateRange"] = date_range
 
         resp = await self._efts.get("/search-index", params=params)
