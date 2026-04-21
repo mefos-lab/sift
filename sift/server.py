@@ -2,6 +2,7 @@
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 import asyncio
 import httpx
@@ -543,6 +544,23 @@ async def list_tools() -> list[Tool]:
                         "default": 10,
                         "description": "Max results (default 10)",
                     },
+                    "jurisdiction": {
+                        "type": "string",
+                        "description": "Filter by jurisdiction code (e.g. 'US-DE', 'GB', 'KY')",
+                    },
+                    "entity_status": {
+                        "type": "string",
+                        "enum": ["ACTIVE", "INACTIVE"],
+                        "description": "Filter by entity status",
+                    },
+                    "legal_form": {
+                        "type": "string",
+                        "description": "Filter by legal form ID",
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Filter by entity category (e.g. 'GENERAL', 'FUND', 'BRANCH')",
+                    },
                 },
                 "required": ["query"],
             },
@@ -567,6 +585,26 @@ async def list_tools() -> list[Tool]:
                 "Get corporate ownership chain for an LEI — direct parent, "
                 "ultimate parent, and child entities. Critical for mapping "
                 "beneficial ownership structures."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "lei": {
+                        "type": "string",
+                        "description": "The 20-character LEI code",
+                    },
+                },
+                "required": ["lei"],
+            },
+        ),
+
+        Tool(
+            name="gleif_related",
+            description=(
+                "Get full corporate relationship tree for an LEI — direct parent, "
+                "ultimate parent, direct children, AND all descendants (ultimate "
+                "children). Deeper than gleif_ownership — returns the complete "
+                "subsidiary tree."
             ),
             inputSchema={
                 "type": "object",
@@ -609,6 +647,11 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "default": 10,
                         "description": "Max results (default 10)",
+                    },
+                    "start": {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Offset for pagination (default 0)",
                     },
                 },
                 "required": ["query"],
@@ -746,6 +789,68 @@ async def list_tools() -> list[Tool]:
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Custom keywords to filter (optional, defaults to legal/regulatory terms)",
+                    },
+                },
+                "required": ["cik"],
+            },
+        ),
+
+        Tool(
+            name="sec_proxy",
+            description=(
+                "Extract executive compensation and board members from the "
+                "latest DEF 14A proxy statement. Shows who runs the company "
+                "and how much they are paid — useful for identifying insiders."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cik": {
+                        "type": "string",
+                        "description": "SEC Central Index Key (CIK) number",
+                    },
+                },
+                "required": ["cik"],
+            },
+        ),
+        Tool(
+            name="sec_8k",
+            description=(
+                "Get recent 8-K current event filings with extracted Item "
+                "descriptions. 8-K filings report material events: acquisitions "
+                "(2.01), officer departures (5.02), material agreements (1.01), "
+                "bankruptcy (1.03), and more."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cik": {
+                        "type": "string",
+                        "description": "SEC Central Index Key (CIK) number",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 5,
+                        "description": "Max 8-K filings to return (default 5)",
+                    },
+                },
+                "required": ["cik"],
+            },
+        ),
+        Tool(
+            name="sec_amendments",
+            description=(
+                "Get 10-K/A and 10-Q/A amendment filings. Companies that "
+                "repeatedly amend filings may be correcting errors or responding "
+                "to SEC inquiries — the existence of amendments is itself a risk "
+                "signal."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cik": {
+                        "type": "string",
+                        "description": "SEC Central Index Key (CIK) number",
                     },
                 },
                 "required": ["cik"],
@@ -900,6 +1005,68 @@ async def list_tools() -> list[Tool]:
             },
         ),
 
+        Tool(
+            name="uk_disqualified",
+            description=(
+                "Search or look up disqualified company directors. "
+                "Provide a query to search by name, or an officer_id "
+                "for full disqualification details (dates, reasons, "
+                "associated companies)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Name to search in disqualified directors register",
+                    },
+                    "officer_id": {
+                        "type": "string",
+                        "description": "Specific officer ID for disqualification details",
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="uk_insolvency",
+            description=(
+                "Get insolvency case history for a UK company — liquidation "
+                "type, dates, and appointed insolvency practitioners."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "company_number": {
+                        "type": "string",
+                        "description": "UK Companies House number",
+                    },
+                },
+                "required": ["company_number"],
+            },
+        ),
+        Tool(
+            name="uk_dissolved_search",
+            description=(
+                "Search for dissolved UK companies. Useful for investigating "
+                "shell companies that were created and quickly dissolved."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Company name to search for among dissolved companies",
+                    },
+                    "start_index": {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Offset for pagination (default 0)",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+
         # =================================================================
         # CourtListener tools
         # =================================================================
@@ -1019,6 +1186,67 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["docket_id"],
+            },
+        ),
+
+        Tool(
+            name="court_opinion",
+            description=(
+                "Get a court opinion by ID, including the full text "
+                "and author information."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "opinion_id": {
+                        "type": "integer",
+                        "description": "CourtListener opinion ID",
+                    },
+                },
+                "required": ["opinion_id"],
+            },
+        ),
+        Tool(
+            name="court_judge",
+            description=(
+                "Search for or look up a judge/attorney. Provide a query "
+                "to search by name, or a person_id for full details "
+                "(positions, courts, dates)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Name to search for",
+                    },
+                    "person_id": {
+                        "type": "integer",
+                        "description": "CourtListener person ID for details",
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="court_bankruptcy",
+            description=(
+                "Search for bankruptcy cases. Optionally filter by "
+                "chapter (7=liquidation, 11=reorganization, 13=individual)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Company or person name to search for bankruptcy cases",
+                    },
+                    "chapter": {
+                        "type": "string",
+                        "enum": ["7", "11", "13"],
+                        "description": "Bankruptcy chapter to filter by",
+                    },
+                },
+                "required": ["query"],
             },
         ),
 
@@ -1266,6 +1494,84 @@ async def list_tools() -> list[Tool]:
             },
         ),
 
+        Tool(
+            name="aleph_expand",
+            description=(
+                "Expand an Aleph entity's network — discover all connected "
+                "entities and relationships (ownership, directorship, etc.)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "Aleph entity ID to expand",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Max connected entities (default 50)",
+                    },
+                },
+                "required": ["entity_id"],
+            },
+        ),
+        Tool(
+            name="aleph_documents",
+            description=(
+                "Search documents within a specific Aleph collection/dataset. "
+                "Useful for finding leaked documents, contracts, or filings "
+                "related to an investigation."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "collection_id": {
+                        "type": "integer",
+                        "description": "Aleph collection ID to search within",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Search terms (optional — omit to list all documents)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Max results (default 20)",
+                    },
+                },
+                "required": ["collection_id"],
+            },
+        ),
+        Tool(
+            name="aleph_relationships",
+            description=(
+                "Get entity relationships filtered by type. Returns ownership, "
+                "directorship, membership, and other connections. Optionally "
+                "filter by relationship schemata."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "Aleph entity ID",
+                    },
+                    "schemata": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Filter by schema types (e.g. ['Ownership', 'Directorship'])",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Max results (default 50)",
+                    },
+                },
+                "required": ["entity_id"],
+            },
+        ),
+
         # =================================================================
         # UK Land Registry tools
         # =================================================================
@@ -1328,6 +1634,96 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["postcode"],
+            },
+        ),
+
+        Tool(
+            name="land_transaction_chain",
+            description=(
+                "Get property transaction history at a specific address. "
+                "Shows all sales over time — useful for identifying rapid "
+                "flipping or circular transactions."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "paon": {
+                        "type": "string",
+                        "description": "Primary address object name (house number/name)",
+                    },
+                    "street": {
+                        "type": "string",
+                        "description": "Street name",
+                    },
+                    "town": {
+                        "type": "string",
+                        "description": "Town name",
+                    },
+                    "postcode": {
+                        "type": "string",
+                        "description": "UK postcode (optional, narrows results)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Max results (default 20)",
+                    },
+                },
+                "required": ["paon", "street", "town"],
+            },
+        ),
+        Tool(
+            name="land_area_stats",
+            description=(
+                "Get property price statistics (avg/min/max/count) by year "
+                "for a town. Useful for identifying price anomalies or "
+                "understanding local market context."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "town": {
+                        "type": "string",
+                        "description": "Town name to get stats for",
+                    },
+                    "year_from": {
+                        "type": "integer",
+                        "description": "Start year filter (optional)",
+                    },
+                    "year_to": {
+                        "type": "integer",
+                        "description": "End year filter (optional)",
+                    },
+                },
+                "required": ["town"],
+            },
+        ),
+        Tool(
+            name="land_high_value",
+            description=(
+                "Search for high-value property transactions in a town. "
+                "High-value purchases (>£1M by default) are a key money "
+                "laundering indicator in UK real estate."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "town": {
+                        "type": "string",
+                        "description": "Town to search",
+                    },
+                    "min_price": {
+                        "type": "integer",
+                        "default": 1000000,
+                        "description": "Minimum transaction price (default £1,000,000)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Max results (default 20)",
+                    },
+                },
+                "required": ["town"],
             },
         ),
 
@@ -1505,6 +1901,82 @@ async def list_tools() -> list[Tool]:
         ),
 
         # =================================================================
+        # Scan history tools
+        # =================================================================
+        # =================================================================
+        # Health check tool
+        # =================================================================
+        Tool(
+            name="scan_health_check",
+            description=(
+                "Verify API connectivity for all data sources. Makes one "
+                "lightweight probe per source and reports which are available, "
+                "which have invalid keys, and which are down. Call this before "
+                "running scans to avoid wasting budget on degraded sources."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+
+        Tool(
+            name="scan_history_read",
+            description=(
+                "Read scan history for a scan type. Returns previously used "
+                "seeds, pagination offsets from the last run, run count, and "
+                "metadata. Use before starting a scan to avoid re-scanning "
+                "the same seeds and to resume pagination from where you left off."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "scan_type": {
+                        "type": "string",
+                        "description": "The scan type to read history for",
+                    },
+                },
+                "required": ["scan_type"],
+            },
+        ),
+        Tool(
+            name="scan_history_write",
+            description=(
+                "Record a completed scan run. Stores the seeds used, finding "
+                "count, pagination offsets, and optional metadata so that "
+                "subsequent runs can cover new ground."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "scan_type": {
+                        "type": "string",
+                        "description": "The scan type that was run",
+                    },
+                    "seeds_used": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Names/IDs used as seeds in this run",
+                    },
+                    "findings_count": {
+                        "type": "integer",
+                        "description": "Number of findings (pattern matches) from this run",
+                    },
+                    "offsets": {
+                        "type": "object",
+                        "description": "Pagination offsets per source (e.g. {\"opensanctions\": 20})",
+                        "additionalProperties": {"type": "integer"},
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "description": "Optional metadata (e.g. search term used, jurisdiction index)",
+                    },
+                },
+                "required": ["scan_type", "seeds_used", "findings_count"],
+            },
+        ),
+
+        # =================================================================
         # Deep traversal tool
         # =================================================================
         Tool(
@@ -1576,9 +2048,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                  "sanctions_batch_match", "sanctions_algorithms", "sanctions_monitor"}
     _ch_tools = {"uk_search", "uk_company", "uk_officer_appointments",
                  "uk_filing_history", "uk_accounts", "uk_charges",
-                 "uk_confirmation_status"}
+                 "uk_confirmation_status", "uk_disqualified",
+                 "uk_insolvency", "uk_dissolved_search"}
     _cl_tools = {"court_search", "court_docket", "court_docket_entries",
-                 "court_parties", "court_complaint", "court_docket_detail"}
+                 "court_parties", "court_complaint", "court_docket_detail",
+                 "court_opinion", "court_judge", "court_bankruptcy"}
 
     global _last_investigation
 
@@ -1753,6 +2227,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = await gleif_client.search(
                 query=arguments["query"],
                 page_size=arguments.get("page_size", 10),
+                jurisdiction=arguments.get("jurisdiction"),
+                entity_status=arguments.get("entity_status"),
+                legal_form=arguments.get("legal_form"),
+                category=arguments.get("category"),
             )
 
         elif name == "gleif_entity":
@@ -1760,6 +2238,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         elif name == "gleif_ownership":
             result = await gleif_client.get_ownership(arguments["lei"])
+
+        elif name == "gleif_related":
+            result = await gleif_client.get_all_relationships(arguments["lei"])
 
         # =============================================================
         # SEC EDGAR tools
@@ -1770,6 +2251,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 forms=arguments.get("forms"),
                 date_range=arguments.get("date_range"),
                 count=arguments.get("count", 10),
+                start=arguments.get("start", 0),
             )
 
         elif name == "sec_company":
@@ -1797,6 +2279,17 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = await sec_client.get_risk_factors(
                 arguments["cik"], keywords=arguments.get("keywords"),
             )
+
+        elif name == "sec_proxy":
+            result = await sec_client.get_proxy_statement(arguments["cik"])
+
+        elif name == "sec_8k":
+            result = await sec_client.get_8k_events(
+                arguments["cik"], limit=arguments.get("limit", 5),
+            )
+
+        elif name == "sec_amendments":
+            result = await sec_client.get_amendments(arguments["cik"])
 
         # =============================================================
         # UK Companies House tools
@@ -1850,6 +2343,27 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 arguments["company_number"],
             )
 
+        elif name == "uk_disqualified":
+            if arguments.get("officer_id"):
+                result = await ch_client.get_disqualified_officer(
+                    arguments["officer_id"],
+                )
+            elif arguments.get("query"):
+                result = await ch_client.search_disqualified(
+                    arguments["query"],
+                )
+            else:
+                result = {"error": "Provide either 'query' or 'officer_id'"}
+
+        elif name == "uk_insolvency":
+            result = await ch_client.get_insolvency(arguments["company_number"])
+
+        elif name == "uk_dissolved_search":
+            result = await ch_client.search_dissolved(
+                arguments["query"],
+                start_index=arguments.get("start_index", 0),
+            )
+
         # =============================================================
         # CourtListener tools
         # =============================================================
@@ -1880,6 +2394,27 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         elif name == "court_docket_detail":
             result = await cl_client.get_docket_detail(arguments["docket_id"])
 
+        elif name == "court_opinion":
+            result = await cl_client.get_opinion(arguments["opinion_id"])
+
+        elif name == "court_judge":
+            if arguments.get("person_id"):
+                result = await cl_client.get_person(arguments["person_id"])
+            elif arguments.get("query"):
+                result = await cl_client.search_people(arguments["query"])
+            else:
+                result = {"error": "Provide either 'query' or 'person_id'"}
+
+        elif name == "court_bankruptcy":
+            # Map chapter to nature_of_suit codes
+            chapter_codes = {"7": "422", "11": "423", "13": "424"}
+            nos = chapter_codes.get(arguments.get("chapter", ""))
+            result = await cl_client.search(
+                query=arguments["query"],
+                type="r",
+                nature_of_suit=nos,
+            )
+
         # =============================================================
         # OCCRP Aleph tools
         # =============================================================
@@ -1906,6 +2441,26 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 limit=arguments.get("limit", 10),
             )
 
+        elif name == "aleph_expand":
+            result = await aleph_client.expand_entity(
+                entity_id=arguments["entity_id"],
+                limit=arguments.get("limit", 50),
+            )
+
+        elif name == "aleph_documents":
+            result = await aleph_client.search_collection_documents(
+                collection_id=arguments["collection_id"],
+                query=arguments.get("query", ""),
+                limit=arguments.get("limit", 20),
+            )
+
+        elif name == "aleph_relationships":
+            result = await aleph_client.get_entity_relationships(
+                entity_id=arguments["entity_id"],
+                limit=arguments.get("limit", 50),
+                schemata=arguments.get("schemata"),
+            )
+
         # =============================================================
         # UK Land Registry tools
         # =============================================================
@@ -1922,6 +2477,29 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = await land_registry_client.search_postcode(
                 postcode=arguments["postcode"],
                 limit=arguments.get("limit", 50),
+            )
+
+        elif name == "land_transaction_chain":
+            result = await land_registry_client.search_address_history(
+                paon=arguments["paon"],
+                street=arguments["street"],
+                town=arguments["town"],
+                postcode=arguments.get("postcode"),
+                limit=arguments.get("limit", 20),
+            )
+
+        elif name == "land_area_stats":
+            result = await land_registry_client.get_area_stats(
+                town=arguments["town"],
+                year_from=arguments.get("year_from"),
+                year_to=arguments.get("year_to"),
+            )
+
+        elif name == "land_high_value":
+            result = await land_registry_client.search_high_value(
+                town=arguments["town"],
+                min_price=arguments.get("min_price", 1_000_000),
+                limit=arguments.get("limit", 20),
             )
 
         # =============================================================
@@ -1996,6 +2574,110 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 }
 
         # =============================================================
+        # Health check
+        # =============================================================
+        elif name == "scan_health_check":
+            # Source-to-scan-type mapping
+            scan_source_reqs = {
+                "sanctions-evasion": ["ICIJ", "OpenSanctions"],
+                "pep-opacity": ["OpenSanctions", "Wikidata", "ICIJ"],
+                "nominee-shield": ["ICIJ", "OpenSanctions"],
+                "intermediary-cluster": ["ICIJ", "OpenSanctions"],
+                "beneficial-ownership-gap": ["GLEIF", "ICIJ"],
+                "mass-registration": ["ICIJ"],
+                "disqualified-director": ["Companies House", "OpenSanctions", "ICIJ"],
+                "rapid-dissolution": ["Companies House", "OpenSanctions"],
+                "phoenix-company": ["Companies House", "ICIJ"],
+                "llp-opacity": ["Companies House"],
+                "property-layering": ["Land Registry", "Companies House", "ICIJ"],
+                "sec-amendment-cluster": ["SEC EDGAR", "OpenSanctions", "ICIJ"],
+                "sec-officer-churn": ["SEC EDGAR", "OpenSanctions", "ICIJ"],
+                "bankruptcy-network": ["CourtListener", "SEC EDGAR", "OpenSanctions", "ICIJ"],
+            }
+
+            async def _probe(name: str, coro):
+                try:
+                    await coro
+                    return name, "ok", None
+                except httpx.HTTPStatusError as e:
+                    code = e.response.status_code
+                    if code in (401, 403):
+                        return name, "invalid_key", f"HTTP {code}"
+                    return name, "error", f"HTTP {code}"
+                except (httpx.TimeoutException, httpx.ConnectError) as e:
+                    return name, "unreachable", str(type(e).__name__)
+                except Exception as e:
+                    return name, "error", str(e)
+
+            probes = []
+            probes.append(_probe("ICIJ", icij_client.reconcile(query="test")))
+            probes.append(_probe("GLEIF", gleif_client.search("test", page_size=1)))
+            probes.append(_probe("SEC EDGAR", sec_client.search("test", count=1)))
+            probes.append(_probe("Wikidata", wikidata_client.search("test", limit=1)))
+            probes.append(_probe("Land Registry", land_registry_client.search_price_paid("London", limit=1)))
+
+            if os_client:
+                probes.append(_probe("OpenSanctions", os_client.search("test", limit=1)))
+            if ch_client:
+                probes.append(_probe("Companies House", ch_client.search_company("test", items_per_page=1)))
+            if cl_client:
+                probes.append(_probe("CourtListener", cl_client.search("test")))
+            if aleph_client:
+                probes.append(_probe("Aleph", aleph_client.search_entities("test", limit=1)))
+
+            probe_results = await asyncio.gather(*probes)
+
+            sources = {}
+            for svc_name, status, error in probe_results:
+                entry = {"status": status}
+                if error:
+                    entry["error"] = error
+                sources[svc_name] = entry
+
+            # Mark unconfigured clients
+            if os_client is None:
+                sources["OpenSanctions"] = {"status": "not_configured", "env_var": "OPENSANCTIONS_API_KEY"}
+            if ch_client is None:
+                sources["Companies House"] = {"status": "not_configured", "env_var": "COMPANIES_HOUSE_API_KEY"}
+            if cl_client is None:
+                sources["CourtListener"] = {"status": "not_configured", "env_var": "COURTLISTENER_API_TOKEN"}
+            if aleph_client is None:
+                sources["Aleph"] = {"status": "not_configured", "env_var": "ALEPH_API_KEY"}
+
+            degraded = [s for s, info in sources.items() if info["status"] != "ok"]
+            affected_scans = {}
+            for scan, reqs in scan_source_reqs.items():
+                missing = [r for r in reqs if r in degraded]
+                if missing:
+                    affected_scans[scan] = missing
+
+            result = {
+                "sources": sources,
+                "degraded": degraded,
+                "affected_scans": affected_scans,
+            }
+
+        # =============================================================
+        # Scan history tools
+        # =============================================================
+        elif name == "scan_history_read":
+            from sift.scan_history import get_summary
+            result = get_summary(arguments["scan_type"])
+
+        elif name == "scan_history_write":
+            from sift.scan_history import ScanRecord, save_record
+            record = ScanRecord(
+                scan_type=arguments["scan_type"],
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                seeds_used=arguments["seeds_used"],
+                findings_count=arguments["findings_count"],
+                last_offset=arguments.get("offsets", {}),
+                metadata=arguments.get("metadata", {}),
+            )
+            save_record(record)
+            result = {"status": "saved", "scan_type": record.scan_type}
+
+        # =============================================================
         # Export tools
         # =============================================================
         elif name == "export_json":
@@ -2036,8 +2718,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             else:
                 lei_entity = await gleif_client.get_lei(lei)
 
-            # Step 2: Get ownership chain
-            ownership = await gleif_client.get_ownership(lei)
+            # Step 2: Get full ownership tree
+            ownership = await gleif_client.get_all_relationships(lei)
 
             # Step 3: Collect all LEIs in the chain
             all_leis = [lei]
@@ -2045,7 +2727,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 all_leis.append(ownership["direct_parent"])
             if ownership.get("ultimate_parent"):
                 all_leis.append(ownership["ultimate_parent"])
-            all_leis.extend(ownership.get("children", [])[:20])
+            all_leis.extend(ownership.get("direct_children", [])[:20])
             all_leis = list(dict.fromkeys(all_leis))  # dedupe
 
             # Step 4: Look up each LEI and cross-reference
@@ -2118,7 +2800,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "ownership": {
                     "direct_parent": ownership.get("direct_parent"),
                     "ultimate_parent": ownership.get("ultimate_parent"),
-                    "subsidiaries": len(ownership.get("children", [])),
+                    "direct_subsidiaries": len(ownership.get("direct_children", [])),
+                    "all_descendants": len(ownership.get("all_children", [])),
                 },
                 "chain": chain,
                 "flags": {
@@ -2401,6 +3084,79 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         } for h in hits],
                     }
 
+            # Phase 2: enrichment checks (parallel, triggered by phase 1 hits)
+            phase2_tasks = []
+            phase2_labels = []
+
+            # CH insolvency for first company found
+            ch_companies = profile.get("sources", {}).get(
+                "companies_house", {}).get("results", [])
+            if ch_client and ch_companies:
+                cn = ch_companies[0].get("company_number", "")
+                if cn:
+                    phase2_tasks.append(ch_client.get_insolvency(cn))
+                    phase2_labels.append("insolvency")
+
+            # Disqualified directors check for first company's name
+            if ch_client and ch_companies:
+                title = ch_companies[0].get("title", "")
+                if title:
+                    phase2_tasks.append(ch_client.search_disqualified(title))
+                    phase2_labels.append("disqualified")
+
+            # SEC amendments + 8-K for first CIK found
+            sec_hits = profile.get("sources", {}).get(
+                "sec_edgar", {}).get("results", [])
+            if sec_hits:
+                cik = sec_hits[0].get("cik", "")
+                if cik:
+                    phase2_tasks.append(sec_client.get_amendments(cik))
+                    phase2_labels.append("amendments")
+                    phase2_tasks.append(sec_client.get_8k_events(cik, limit=3))
+                    phase2_labels.append("8k_events")
+
+            # Bankruptcy search
+            if cl_client:
+                phase2_tasks.append(cl_client.search(
+                    query_name, nature_of_suit="422"))
+                phase2_labels.append("bankruptcy")
+
+            # Fire all phase 2 in parallel
+            insolvency_data = None
+            disqualified_data = None
+            amendments_data = None
+            events_8k_data = None
+            bankruptcy_data = None
+
+            if phase2_tasks:
+                p2_results = await asyncio.gather(
+                    *phase2_tasks, return_exceptions=True)
+                for label, res in zip(phase2_labels, p2_results):
+                    if isinstance(res, Exception):
+                        continue
+                    if label == "insolvency":
+                        insolvency_data = res
+                    elif label == "disqualified":
+                        disqualified_data = res
+                    elif label == "amendments":
+                        amendments_data = res
+                    elif label == "8k_events":
+                        events_8k_data = res
+                    elif label == "bankruptcy":
+                        bankruptcy_data = res
+
+            # Add enrichment to profile
+            if insolvency_data and insolvency_data.get("cases"):
+                profile["insolvency"] = insolvency_data["cases"]
+            if disqualified_data and disqualified_data.get("items"):
+                profile["disqualified_officers"] = disqualified_data["items"]
+            if amendments_data and amendments_data.get("amendments"):
+                profile["amendments"] = amendments_data["amendments"]
+            if events_8k_data and events_8k_data.get("events"):
+                profile["material_events"] = events_8k_data["events"]
+            if bankruptcy_data and bankruptcy_data.get("count", 0) > 0:
+                profile["bankruptcy_cases"] = bankruptcy_data.get("results", [])[:3]
+
             # Risk summary
             sources_found = list(profile["sources"].keys())
             profile["risk_indicators"] = {
@@ -2416,6 +3172,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 ),
                 "litigation": "courtlistener" in sources_found,
                 "sec_filings": "sec_edgar" in sources_found,
+                "insolvency": bool(profile.get("insolvency")),
+                "disqualified_directors": bool(profile.get("disqualified_officers")),
+                "filing_amendments": len(profile.get("amendments", [])),
+                "material_events": len(profile.get("material_events", [])),
+                "bankruptcy": bool(profile.get("bankruptcy_cases")),
             }
 
             result = profile

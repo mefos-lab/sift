@@ -62,12 +62,13 @@ class SECEdgarClient:
         forms: str | None = None,
         date_range: str | None = None,
         count: int = 10,
+        start: int = 0,
     ) -> dict[str, Any]:
         """Full-text search across SEC filings."""
         await self._rate_limit()
         params: dict[str, Any] = {
             "q": query,
-            "from": 0,
+            "from": start,
             "size": count,
         }
         if forms:
@@ -474,6 +475,210 @@ class SECEdgarClient:
             "total_paragraphs": len(paragraphs),
             "matching_paragraphs": matching,
         }
+
+    async def get_proxy_statement(self, cik: str | int) -> dict[str, Any]:
+        """Extract executive compensation and board members from latest DEF 14A."""
+        company = await self.get_company(cik)
+        proxy_filings = [
+            f for f in company.get("recent_filings", [])
+            if f["form"] == "DEF 14A"
+        ]
+        if not proxy_filings:
+            return {
+                "cik": str(cik),
+                "name": company.get("name", ""),
+                "filing_date": "",
+                "executives": [],
+                "board_members": [],
+                "note": "No DEF 14A filing found",
+            }
+        latest = proxy_filings[0]
+        accession = latest["accession_number"]
+        primary = latest.get("primary_document", "")
+        if not primary:
+            return {
+                "cik": str(cik),
+                "name": company.get("name", ""),
+                "filing_date": latest.get("filing_date", ""),
+                "executives": [],
+                "board_members": [],
+                "note": "No primary document in DEF 14A",
+            }
+        await self._rate_limit()
+        cik_num = str(int(str(cik).lstrip("0") or "0"))
+        acc_clean = accession.replace("-", "")
+        resp = await self._www.get(
+            f"/Archives/edgar/data/{cik_num}/{acc_clean}/{primary}",
+        )
+        resp.raise_for_status()
+        html = resp.text
+        executives = _parse_proxy_compensation(html)
+        board_members = _parse_proxy_board(html)
+        return {
+            "cik": str(cik),
+            "name": company.get("name", ""),
+            "filing_date": latest.get("filing_date", ""),
+            "accession_number": accession,
+            "executives": executives,
+            "board_members": board_members,
+        }
+
+    async def get_8k_events(
+        self, cik: str | int, limit: int = 5,
+    ) -> dict[str, Any]:
+        """Get recent 8-K filings with extracted Item descriptions."""
+        company = await self.get_company(cik)
+        filings_8k = [
+            f for f in company.get("recent_filings", [])
+            if f["form"] == "8-K"
+        ][:limit]
+        events = []
+        for filing in filings_8k:
+            accession = filing["accession_number"]
+            primary = filing.get("primary_document", "")
+            if not primary:
+                events.append({
+                    "filing_date": filing.get("filing_date", ""),
+                    "accession_number": accession,
+                    "items": [],
+                })
+                continue
+            try:
+                await self._rate_limit()
+                cik_num = str(int(str(cik).lstrip("0") or "0"))
+                acc_clean = accession.replace("-", "")
+                resp = await self._www.get(
+                    f"/Archives/edgar/data/{cik_num}/{acc_clean}/{primary}",
+                )
+                resp.raise_for_status()
+                items = _parse_8k_items(resp.text)
+                events.append({
+                    "filing_date": filing.get("filing_date", ""),
+                    "accession_number": accession,
+                    "items": items,
+                })
+            except Exception:
+                events.append({
+                    "filing_date": filing.get("filing_date", ""),
+                    "accession_number": accession,
+                    "items": [],
+                    "error": "Failed to fetch/parse",
+                })
+        return {
+            "cik": str(cik),
+            "name": company.get("name", ""),
+            "events": events,
+            "count": len(events),
+        }
+
+    async def get_amendments(self, cik: str | int) -> dict[str, Any]:
+        """Get 10-K/A and 10-Q/A amendment filings.
+
+        The existence and timing of amendments is itself a risk signal —
+        companies that repeatedly amend filings may be correcting errors
+        or responding to SEC inquiries.
+        """
+        company = await self.get_company(cik)
+        amendment_forms = {"10-K/A", "10-Q/A"}
+        amendments = [
+            {
+                "form": f["form"],
+                "filing_date": f.get("filing_date", ""),
+                "accession_number": f["accession_number"],
+            }
+            for f in company.get("recent_filings", [])
+            if f["form"] in amendment_forms
+        ]
+        return {
+            "cik": str(cik),
+            "name": company.get("name", ""),
+            "amendments": amendments,
+            "count": len(amendments),
+        }
+
+
+def _parse_proxy_compensation(html: str) -> list[dict[str, str]]:
+    """Extract executive names and titles from compensation tables in DEF 14A."""
+    executives = []
+    # Look for compensation table rows: <tr><td>Name</td><td>Title</td>...
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.I | re.DOTALL)
+    for row in rows:
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.I | re.DOTALL)
+        if len(cells) >= 2:
+            name = _strip_tags(cells[0]).strip()
+            title = _strip_tags(cells[1]).strip()
+            # Filter: names should be 3-60 chars, not header-like
+            if (3 <= len(name) <= 60 and name[0].isupper()
+                    and name.lower() not in ("name", "total", "all others")):
+                executives.append({"name": name, "title": title})
+    return executives
+
+
+def _parse_proxy_board(html: str) -> list[str]:
+    """Extract board member names from DEF 14A proxy statement."""
+    members = []
+    # Pattern: <strong>Name</strong> or <b>Name</b> followed by director-like text
+    patterns = [
+        re.compile(r"<(?:strong|b)[^>]*>([\w\s.,'()-]{3,50})</(?:strong|b)>\s*,?\s*(?:Independent|Director|Chairman|Lead)", re.I),
+        re.compile(r"(?:Director|Nominee)[^<]*<[^>]*>([\w\s.,'()-]{3,50})<", re.I),
+    ]
+    for pattern in patterns:
+        for match in pattern.finditer(html):
+            name = _strip_tags(match.group(1)).strip()
+            if name and name not in members and len(name) >= 3:
+                members.append(name)
+    return members
+
+
+# Standard 8-K Item number to description mapping
+_8K_ITEMS = {
+    "1.01": "Entry into a Material Definitive Agreement",
+    "1.02": "Termination of a Material Definitive Agreement",
+    "1.03": "Bankruptcy or Receivership",
+    "2.01": "Completion of Acquisition or Disposition of Assets",
+    "2.02": "Results of Operations and Financial Condition",
+    "2.03": "Creation of a Direct Financial Obligation",
+    "2.04": "Triggering Events That Accelerate or Increase an Obligation",
+    "2.05": "Costs Associated with Exit or Disposal Activities",
+    "2.06": "Material Impairments",
+    "3.01": "Notice of Delisting or Failure to Satisfy a Continued Listing Rule",
+    "3.02": "Unregistered Sales of Equity Securities",
+    "3.03": "Material Modification to Rights of Security Holders",
+    "4.01": "Changes in Registrant's Certifying Accountant",
+    "4.02": "Non-Reliance on Previously Issued Financial Statements",
+    "5.01": "Changes in Control of Registrant",
+    "5.02": "Departure of Directors or Certain Officers; Election of Directors",
+    "5.03": "Amendments to Articles of Incorporation or Bylaws",
+    "5.05": "Amendments to the Registrant's Code of Ethics",
+    "5.07": "Submission of Matters to a Vote of Security Holders",
+    "7.01": "Regulation FD Disclosure",
+    "8.01": "Other Events",
+    "9.01": "Financial Statements and Exhibits",
+}
+
+
+def _parse_8k_items(html: str) -> list[dict[str, str]]:
+    """Extract Item numbers and their content from an 8-K filing."""
+    items = []
+    # Match "Item X.XX" headers
+    item_pattern = re.compile(
+        r"Item\s+(\d+\.\d{2})\b[.\s]*([^\n<]{0,200})",
+        re.I,
+    )
+    matches = list(item_pattern.finditer(html))
+    for i, match in enumerate(matches):
+        item_num = match.group(1)
+        # Get text between this item and the next (or end)
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else start + 2000
+        section_html = html[start:end]
+        summary = _strip_tags(section_html)[:500].strip()
+        items.append({
+            "item": item_num,
+            "title": _8K_ITEMS.get(item_num, match.group(2).strip()),
+            "summary": summary,
+        })
+    return items
 
 
 def _strip_tags(html: str) -> str:
