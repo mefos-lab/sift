@@ -482,11 +482,11 @@ async def traverse(
                                     })
                                     _add_edge(fnode.id, oid, "cross-reference", hop)
 
-            # ── GLEIF: ownership chain ──
+            # ── GLEIF: full ownership tree ──
             if gleif_client and fnode.id.startswith("gleif-") and api_calls < budget:
                 lei = fnode.id[6:]
-                ownership = await _api(lambda l=lei: gleif_client.get_ownership(l),
-                                       service="GLEIF", endpoint="/ownership")
+                ownership = await _api(lambda l=lei: gleif_client.get_all_relationships(l),
+                                       service="GLEIF", endpoint="/relationships")
                 if ownership:
                     for parent_lei in [ownership.get("direct_parent"),
                                        ownership.get("ultimate_parent")]:
@@ -495,11 +495,19 @@ async def traverse(
                             _add_node(pid, "gleif", parent_lei,
                                       "Company", hop, {"lei": parent_lei})
                             _add_edge(fnode.id, pid, "parent_of", hop)
-                    for child_lei in ownership.get("children", []):
+                    for child_lei in ownership.get("direct_children", []):
                         cid = f"gleif-{child_lei}"
                         _add_node(cid, "gleif", child_lei,
                                   "Company", hop, {"lei": child_lei})
                         _add_edge(fnode.id, cid, "subsidiary", hop)
+                    # all_children includes grandchildren+ not in direct_children
+                    direct_set = set(ownership.get("direct_children", []))
+                    for child_lei in ownership.get("all_children", []):
+                        if child_lei not in direct_set:
+                            cid = f"gleif-{child_lei}"
+                            _add_node(cid, "gleif", child_lei,
+                                      "Company", hop, {"lei": child_lei})
+                            _add_edge(fnode.id, cid, "descendant", hop)
 
             # ── Companies House: PSCs + OS cross-bridge ──
             # Only expand actual company nodes (uk-NNNNNNNN), not PSC
@@ -563,12 +571,55 @@ async def traverse(
                                             _add_edge(psc_id, oid,
                                                       "cross-reference", hop)
 
-            # ── Aleph: similar entities ──
+            # ── Companies House: insolvency check ──
+            if (ch_client and fnode.id.startswith("uk-")
+                    and not fnode.id.startswith("uk-psc-")
+                    and api_calls < budget):
+                cn = fnode.id[3:]
+                insolvency = await _api(lambda c=cn: ch_client.get_insolvency(c),
+                                         service="Companies House", endpoint="/insolvency")
+                if insolvency and insolvency.get("cases"):
+                    fnode.properties["insolvency"] = True
+                    fnode.properties["insolvency_cases"] = insolvency["cases"]
+
+            # ── Aleph: expand relationships + similar entities ──
             if aleph_client and fnode.id.startswith("aleph-") and api_calls < budget:
                 aleph_id = fnode.id[6:]
-                similar = await _api(lambda aid=aleph_id: aleph_client.get_entity_similar(
-                    aid, limit=max_fanout,
-                ), service="Aleph", endpoint="/similar")
+                # Fire both expand and similar in parallel
+                aleph_tasks = [
+                    _api(lambda aid=aleph_id: aleph_client.expand_entity(
+                        aid, limit=max_fanout,
+                    ), service="Aleph", endpoint="/expand"),
+                    _api(lambda aid=aleph_id: aleph_client.get_entity_similar(
+                        aid, limit=max_fanout,
+                    ), service="Aleph", endpoint="/similar"),
+                ]
+                expand_res, similar = await asyncio.gather(*aleph_tasks)
+
+                # Process expanded relationships
+                if expand_res:
+                    _rel_map = {
+                        "Ownership": "owns",
+                        "Directorship": "director_of",
+                        "Membership": "member_of",
+                    }
+                    for er in expand_res.get("results", [])[:max_fanout]:
+                        eid = er.get("id", "")
+                        if eid:
+                            enid = f"aleph-{eid}"
+                            schema = er.get("schema", "Thing")
+                            _add_node(enid, "aleph", er.get("name", eid),
+                                      schema, hop, {
+                                "aleph_id": eid,
+                                "countries": er.get("countries", []),
+                                "country_codes": er.get("countries", []),
+                                "jurisdiction": er.get("jurisdiction", ""),
+                                "datasets": er.get("datasets", []),
+                            })
+                            rel = _rel_map.get(schema, "related")
+                            _add_edge(fnode.id, enid, rel, hop)
+
+                # Process similar entities
                 if similar:
                     for sr in similar.get("results", [])[:max_fanout]:
                         sid = sr.get("id", "")

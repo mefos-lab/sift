@@ -104,6 +104,7 @@ def compute_risk_score(node: dict, pattern_hits: list[str] | None = None) -> dic
     - Pattern matches (0-10)
     - Cross-source exposure (0-10)
     - Court/litigation exposure (0-10)
+    - Corporate distress (0-10)
     """
     factors = {}
     total = 0
@@ -200,6 +201,20 @@ def compute_risk_score(node: dict, pattern_hits: list[str] | None = None) -> dic
         court_score = max(court_score, 5)
     factors["litigation"] = court_score
     total += court_score
+
+    # 8. Corporate distress (0-10)
+    distress_score = 0
+    if props.get("insolvency") or props.get("insolvency_status"):
+        distress_score += 5
+    if props.get("disqualified"):
+        distress_score += 5
+    if props.get("bankruptcy") or props.get("bankruptcy_status") or props.get("chapter"):
+        distress_score += 3
+    amendment_count = props.get("amendment_count", 0)
+    if isinstance(amendment_count, (int, float)) and amendment_count >= 3:
+        distress_score += 2
+    factors["corporate_distress"] = min(distress_score, 10)
+    total += factors["corporate_distress"]
 
     # Determine level
     if total >= 60:

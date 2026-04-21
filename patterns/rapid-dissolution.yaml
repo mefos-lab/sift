@@ -41,6 +41,17 @@ detection:
       field: accounts_filed
       optional: true
 
+    - id: involuntary_insolvency
+      description: Company was wound up involuntarily (compulsory liquidation or administration)
+      type: insolvency_status
+      statuses: [compulsory-liquidation, administration, administrative-receiver]
+      optional: true
+
+    - id: director_subsequently_disqualified
+      description: A director was disqualified after the company's dissolution
+      type: officer_disqualification
+      optional: true
+
   indicators:
     - Incorporated and dissolved within 2 years
     - Foreign directors with no UK connection
@@ -49,8 +60,8 @@ detection:
     - Entity name generic or meaningless
 
   scoring:
-    high: [short_lifespan, foreign_directors]
-    medium: short_lifespan
-    low: null
+    high: [short_lifespan, foreign_directors, involuntary_insolvency]
+    medium: [short_lifespan, foreign_directors]
+    low: short_lifespan
 
   data_sources: [companies_house, icij]

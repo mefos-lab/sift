@@ -42,6 +42,18 @@ detection:
       field: ultimate_parent
       source: gleif
 
+    - id: no_aleph_relationships
+      description: No relationships found in OCCRP Aleph investigative data
+      type: missing_field
+      field: aleph_relationships
+      optional: true
+
+    - id: all_corporate_officers
+      description: All officers are corporate entities (no natural persons)
+      type: entity_type_match
+      director_type: [Company, Entity, Organization]
+      optional: true
+
   indicators:
     - Entity in ICIJ with no linked officers
     - Companies House entity with no PSC declaration

@@ -58,14 +58,14 @@ Go beyond degree counts to structural analysis.
 - Structural hole detection — who bridges otherwise disconnected groups
 - **Why:** Structural position in the network is often more revealing than individual node properties.
 
-## 8. GLEIF Full Ownership Chain
-Extract complete ownership data from LEI records.
-- Ultimate parent entity
-- Direct parent entity
+## ~~8. GLEIF Full Ownership Chain~~ ✓
+- ~~Ultimate parent entity~~ ✓ `get_all_relationships`
+- ~~Direct parent entity~~ ✓
+- ~~Direct + ultimate child entities (full subsidiary tree)~~ ✓
+- ~~Search filters (jurisdiction, status, legal form, category)~~ ✓ enhanced `search()`
 - Reporting exceptions (entity claims exemption from reporting — itself a red flag)
 - Relationship dates and status
 - Fund relationships (for investment vehicles)
-- **Why:** GLEIF is the only authoritative, standardized corporate ownership database. We're only using it for basic lookup.
 
 ## 9. Hypothesis Generation
 Have the agent produce investigative theories, not just findings.
@@ -87,8 +87,22 @@ Use the agent's judgment for fuzzy matching decisions the normalizer can't make.
 - ~~Financials tab~~ ✓ SEC XBRL metrics, UK accounts, charge register
 - ~~Filing timeline extension~~ ✓ CH/SEC filings as swim lane, gap markers
 - ~~People tab~~ ✓ family tree, career timeline, PEP badges
-- ~~Litigation tab~~ ✓ case cards, parties, collapsible complaint text
+- ~~Litigation tab~~ ✓ case cards, parties, collapsible complaint text, bankruptcy cases
 - ~~Temporal correlation highlights~~ ✓ dashed lines on timeline for ±6mo overlaps
+- ~~Corporate Risk tab~~ ✓ insolvency cases, disqualified directors, filing amendments
+- ~~Material Events tab~~ ✓ 8-K events, executive compensation, board members
+- ~~Property tab~~ ✓ UK property transactions, price statistics, high-value purchases
+- ~~Documents tab~~ ✓ Aleph leaked documents
+
+## ~~Expanded API Coverage~~ ✓
+- ~~Companies House: disqualified directors, insolvency, dissolved search~~ ✓
+- ~~Aleph: entity expand, collection documents, relationships~~ ✓
+- ~~GLEIF: filtered search, full relationship tree~~ ✓
+- ~~Land Registry: address history, area stats, high-value search~~ ✓
+- ~~CourtListener: opinions, judge/attorney search, bankruptcy~~ ✓
+- ~~SEC EDGAR: proxy statements (DEF 14A), 8-K events, amendments~~ ✓
+- ~~background_check phase 2 enrichment~~ ✓ insolvency, disqualified, amendments, 8-K, bankruptcy
+- ~~ownership_trace full tree~~ ✓ uses `get_all_relationships`
 
 ## Viewer Improvements (remaining)
 - Inline entity links from narrative counts to entity index

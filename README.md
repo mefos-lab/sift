@@ -1,11 +1,11 @@
 # Sift
 
-[![Tests](https://img.shields.io/badge/tests-211%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-238%20passing-brightgreen)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)]()
 [![Data Sources](https://img.shields.io/badge/data%20sources-9-orange)]()
 
-An [MCP server](https://modelcontextprotocol.io/) and **skill set** for **cross-referencing public financial and corporate records** — searches sanctions lists, offshore leak databases, corporate registries, court records, and more across 9 data sources. 63 tools, 18 detection patterns, and interactive D3 visualizations.
+An [MCP server](https://modelcontextprotocol.io/) and **skill set** for **cross-referencing public financial and corporate records** — searches sanctions lists, offshore leak databases, corporate registries, court records, and more across 9 data sources. 80 tools, 24 detection patterns, and interactive D3 visualizations.
 
 ![Network Graph](docs/images/network-graph.png)
 
@@ -142,7 +142,7 @@ Groups all findings by jurisdiction and profiles each one — secrecy rankings, 
 /investigate <name> --patterns
 ```
 
-Focused structural analysis evaluating all findings against 18 documented patterns. Reports which patterns match, with what confidence, and what evidence supports each match.
+Focused structural analysis evaluating all findings against 24 documented patterns. Reports which patterns match, with what confidence, and what evidence supports each match.
 
 ### Scan mode
 
@@ -152,16 +152,22 @@ Focused structural analysis evaluating all findings against 18 documented patter
 
 Hunts for structural patterns across the data sources **without requiring a target name**. The scan generates its own seeds from the databases and cross-references findings automatically.
 
-| Scan type | What it finds |
-|-----------|--------------|
-| `sanctions-evasion` | Sanctioned persons with ICIJ offshore presence |
-| `pep-opacity` | PEP family members behind offshore structures |
-| `nominee-shield` | Professional nominee directors across mass entities |
-| `intermediary-cluster` | Formation agents managing large entity portfolios |
-| `rapid-dissolution` | Short-lived UK companies with suspicious characteristics |
-| `llp-opacity` | UK LLPs with opaque corporate partners in secrecy jurisdictions |
-| `beneficial-ownership-gap` | Entities with no disclosed beneficial owner |
-| `mass-registration` | Addresses hosting large numbers of registered entities |
+| Scan type | What it finds | Jurisdiction |
+|-----------|--------------|---|
+| `sanctions-evasion` | Sanctioned persons with ICIJ offshore presence | International |
+| `pep-opacity` | PEP family members behind offshore structures | International |
+| `disqualified-director` | Banned directors still connected to active companies | UK |
+| `nominee-shield` | Professional nominee directors across mass entities | International |
+| `intermediary-cluster` | Formation agents managing large entity portfolios | International |
+| `rapid-dissolution` | Short-lived companies with insolvency and disqualified directors | UK |
+| `phoenix-company` | Dissolved companies reborn at same address with same directors | UK |
+| `sec-amendment-cluster` | Excessive filing amendments suggesting SEC scrutiny | US |
+| `sec-officer-churn` | Rapid executive departures across related companies | US |
+| `bankruptcy-network` | Related entities filing bankruptcy with shared officers | US |
+| `llp-opacity` | UK LLPs with opaque corporate partners in secrecy jurisdictions | UK |
+| `beneficial-ownership-gap` | Entities with no disclosed beneficial owner | International |
+| `property-layering` | High-value property purchases with offshore ownership | UK |
+| `mass-registration` | Addresses hosting large numbers of registered entities | International |
 
 Run all scans at once with `/investigate --scan all`.
 
@@ -188,12 +194,19 @@ Every investigation can generate an interactive D3 visualization with 8 analytic
 |------|--------------|
 | **Overview** | Intelligence assessment, key findings, risk level |
 | **Network Graph** | Interactive force-directed graph, filterable by source and depth |
-| **Ownership Tree** | GLEIF corporate hierarchy |
+| **Ownership Tree** | GLEIF corporate hierarchy (full subsidiary tree) |
 | **Source Coverage** | Which sources contributed which findings |
 | **Corporate Structure** | Vertical org chart with pattern annotations |
 | **Jurisdiction Flow** | Sankey diagram of person-to-jurisdiction connections |
 | **Timeline** | Chronological narrative across all sources |
 | **Source Matrix** | Cross-source entity resolution |
+| **Financials** | SEC XBRL metrics, UK accounts, charge register |
+| **People** | Family relationships, career history, PEP status from Wikidata |
+| **Litigation** | Court cases, parties, complaint text, bankruptcy filings |
+| **Corporate Risk** | Insolvency cases, disqualified directors, filing amendments |
+| **Material Events** | 8-K events, executive compensation, board members |
+| **Property** | UK property transactions, price statistics, high-value purchases |
+| **Documents** | Leaked documents from OCCRP Aleph investigations |
 
 See the [Gallery](docs/gallery.md) for annotated screenshots of all views.
 
@@ -205,19 +218,19 @@ See the [Gallery](docs/gallery.md) for annotated screenshots of all views.
 |--------|----------|------|-------|
 | [ICIJ Offshore Leaks](https://offshoreleaks.icij.org/) | 810K+ entities from 5 leak investigations | None | 8 |
 | [OpenSanctions](https://www.opensanctions.org/) | 320+ sanctions lists, PEP databases, enforcement records | API key | 9 |
-| [GLEIF LEI Registry](https://www.gleif.org/) | Global corporate identifiers + ownership chains | None | 3 |
-| [SEC EDGAR](https://www.sec.gov/edgar) | US public company filings, 10-K/10-Q/8-K | User-Agent | 8 |
-| [UK Companies House](https://developer-specs.company-information.service.gov.uk/) | UK company records, officers, beneficial ownership (PSC) | Free API key | 7 |
-| [CourtListener](https://www.courtlistener.com/) | US federal court records (PACER/RECAP) | Free token | 6 |
-| [OCCRP Aleph](https://aleph.occrp.org/) | Investigative datasets, company records, leaked documents | Approved account required | 4 |
-| [UK Land Registry](https://landregistry.data.gov.uk/) | Property transaction prices (England/Wales) | None | 2 |
+| [GLEIF LEI Registry](https://www.gleif.org/) | Global corporate identifiers + ownership chains | None | 4 |
+| [SEC EDGAR](https://www.sec.gov/edgar) | US public company filings, 10-K/10-Q/8-K/DEF 14A | User-Agent | 11 |
+| [UK Companies House](https://developer-specs.company-information.service.gov.uk/) | UK company records, officers, PSC, insolvency, disqualifications | Free API key | 10 |
+| [CourtListener](https://www.courtlistener.com/) | US federal court records, opinions, bankruptcy (PACER/RECAP) | Free token | 9 |
+| [OCCRP Aleph](https://aleph.occrp.org/) | Investigative datasets, company records, leaked documents | Approved account required | 7 |
+| [UK Land Registry](https://landregistry.data.gov.uk/) | Property transactions, price history, high-value purchases | None | 5 |
 | [Wikidata](https://www.wikidata.org/) | Structured data on people, companies, political roles | None | 7 |
 
-Plus cross-source tools: `deep_trace` (multi-hop parallel network traversal), `ownership_trace`, `beneficial_owner`, `background_check`, `query` (natural language), `export_json`, `export_report`, and more. **63 tools total**.
+Plus cross-source tools: `deep_trace` (multi-hop parallel network traversal), `ownership_trace`, `beneficial_owner`, `background_check`, `query` (natural language), `export_json`, `export_report`, and more. **80 tools total**.
 
 ## Pattern library
 
-The `patterns/` directory contains 18 documented detection patterns, each with machine-readable YAML rules evaluated against the traversal graph:
+The `patterns/` directory contains 24 documented detection patterns, each with machine-readable YAML rules evaluated against the traversal graph:
 
 | Category | Patterns |
 |----------|----------|
@@ -227,6 +240,7 @@ The `patterns/` directory contains 18 documented detection patterns, each with m
 | **Shell Indicators** | Shell Company Seven-Factor Screen, Mass Registration, Beneficial Ownership Gap |
 | **UK Typologies** | LLP Opacity Vehicle, Rapid Dissolution |
 | **Cross-Source** | Cross-Source Corroboration, Name Variant Obfuscation |
+| **Corporate Distress** | Director Disqualification Network, Phoenix Company, Insider Self-Dealing, Property Layering, Bankruptcy Abuse |
 
 Each pattern includes provenance citations from FATF typologies, ICIJ methodology, Moody's shell company indicators, FinCEN Files analysis, UK National Risk Assessment, and academic AML research.
 
@@ -238,7 +252,7 @@ Patterns evolve through a lifecycle: **PROPOSED** (single investigation) -> **CO
 
 ```
 sift/
-  server.py              — MCP server (63 tools)
+  server.py              — MCP server (80 tools)
   traversal.py           — Multi-hop parallel graph traversal engine
   errors.py              — Resilient error handling, retries, per-service rate limiting
   pattern_matcher.py     — YAML pattern evaluation engine
@@ -260,7 +274,7 @@ sift/
 patterns/                — 18 YAML detection patterns with provenance
 visualizations/          — D3 HTML template
 .claude/skills/          — /investigate skill definition
-tests/                   — 211 tests (mocked HTTP, no API calls)
+tests/                   — 238 tests (mocked HTTP, no API calls)
 ```
 
 ### Error handling and rate limiting
@@ -280,7 +294,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 pip install pytest pytest-asyncio
 
-# Run tests (211 tests, mocked HTTP — no API calls)
+# Run tests (238 tests, mocked HTTP — no API calls)
 pytest tests/ -v
 
 # Run the server directly

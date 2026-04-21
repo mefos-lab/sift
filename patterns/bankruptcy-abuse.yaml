@@ -1,0 +1,82 @@
+name: bankruptcy_abuse
+title: Bankruptcy Abuse
+description: >
+  Pattern of bankruptcy filings across related entities with shared
+  officers. Serial bankruptcy is used to discharge debts while
+  extracting assets through related parties before filing. The US
+  Trustee Program and UK Insolvency Service both target this
+  behaviour. Key indicators include multiple Chapter 11 filings
+  by the same individuals and asset transfers to related entities
+  shortly before filing.
+risk_level: MEDIUM
+status: PROPOSED
+sources:
+  - us_trustee_program
+  - uk_insolvency_service
+references:
+  - title: "U.S. DOJ — U.S. Trustee Program"
+    url: https://www.justice.gov/ust
+
+detection:
+  conditions:
+    - id: bankruptcy_filed
+      description: Entity has filed for bankruptcy
+      type: bankruptcy_filing
+
+    - id: shared_officers
+      description: Officers shared across multiple bankrupt entities
+      type: officer_overlap
+      min_shared_officers: 1
+
+    - id: multiple_entities
+      description: Multiple entities in the network have distress signals
+      type: shared_node
+      node_type: [Company, Entity]
+      min_occurrences: 2
+
+    - id: insolvency_correlation
+      description: UK insolvency cases on related entities
+      type: insolvency_status
+      optional: true
+
+  indicators:
+    - Same officers across multiple bankruptcy filings
+    - Asset transfers to related entities before filing
+    - Pattern of formation, debt accumulation, bankruptcy
+    - Chapter 11 used repeatedly without successful reorganization
+    - Directors of bankrupt companies forming new entities
+
+  actionable_significance:
+    applies_to: US
+    note: >
+      This pattern primarily uses US CourtListener bankruptcy data.
+      The structural signal (shared officers across multiple
+      distressed entities) indicates risk in any jurisdiction, but
+      the legal framework below is US-specific. If UK entities are
+      involved, see the insolvency_correlation condition — UK
+      equivalents are s.213/214 Insolvency Act 1986 (fraudulent/
+      wrongful trading) enforced by the UK Insolvency Service.
+    violation: >
+      Bankruptcy fraud is a federal crime under 18 U.S.C. § 157
+      (up to 5 years imprisonment). Fraudulent transfers before
+      filing violate 11 U.S.C. § 548 (avoidable within 2 years).
+      Serial filings to abuse the automatic stay violate 11 U.S.C.
+      § 362(d).
+    enforcement_body: >
+      US Trustee Program (monitors for abuse and refers to DOJ),
+      DOJ Criminal Division (prosecution), FBI (investigation),
+      SEC (if public companies involved).
+    next_steps:
+      - Map the full network of entities connected to the shared officers
+      - Check for asset transfers between entities in the 2 years before each filing
+      - Look for new entity formations by the same officers after each bankruptcy
+      - Review whether Chapter 11 plans were ever confirmed (or if cases were dismissed/converted)
+      - Cross-reference officers against SEC proxy statements and disqualification registers
+      - Consider referral to the US Trustee if pattern suggests systematic abuse
+
+  scoring:
+    high: [bankruptcy_filed, shared_officers, multiple_entities]
+    medium: [bankruptcy_filed, shared_officers]
+    low: bankruptcy_filed
+
+  data_sources: [courtlistener, companies_house, sec]

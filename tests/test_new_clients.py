@@ -1113,3 +1113,632 @@ class TestWikidataDateXref:
         result = await client.cross_reference_dates("Q456034", ["Q999"])
         assert result["person_id"] == "Q456034"
         assert isinstance(result.get("temporal_overlaps", []), list)
+
+
+# =============================================================================
+# Companies House — new tools tests
+# =============================================================================
+
+class TestCompaniesHouseDisqualified:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/search/disqualified-officers": {
+                "json": {
+                    "total_results": 1,
+                    "items": [
+                        {
+                            "title": "John Fraudster",
+                            "address_snippet": "London",
+                            "links": {
+                                "self": "/disqualified-officers/natural/abc999",
+                            },
+                        }
+                    ],
+                }
+            },
+            "/disqualified-officers/natural/abc999": {
+                "json": {
+                    "name": "John Fraudster",
+                    "disqualifications": [
+                        {
+                            "disqualified_from": "2020-01-01",
+                            "disqualified_until": "2035-01-01",
+                            "reason": {
+                                "description_identifier": "fraud-or-breach-of-duty",
+                                "act": "Company Directors Disqualification Act 1986",
+                                "section": "6",
+                            },
+                            "case_identifier": "CASE-001",
+                            "company_names": ["SCAM LTD"],
+                        }
+                    ],
+                }
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = CompaniesHouseClient(api_key="test-key")
+        c._client = httpx.AsyncClient(
+            base_url="https://api.company-information.service.gov.uk",
+            transport=transport,
+            auth=("test-key", ""),
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_search_disqualified(self, client):
+        result = await client.search_disqualified("Fraudster")
+        assert result["total_results"] == 1
+        assert result["items"][0]["title"] == "John Fraudster"
+
+    @pytest.mark.asyncio
+    async def test_get_disqualified_officer(self, client):
+        result = await client.get_disqualified_officer("abc999")
+        assert result["name"] == "John Fraudster"
+        assert len(result["disqualifications"]) == 1
+        assert result["disqualifications"][0]["disqualified_from"] == "2020-01-01"
+
+
+class TestCompaniesHouseInsolvency:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/company/00000001/insolvency": {
+                "json": {
+                    "cases": [
+                        {
+                            "type": "compulsory-liquidation",
+                            "dates": [
+                                {"type": "wound-up-on", "date": "2023-06-15"},
+                            ],
+                            "practitioners": [
+                                {
+                                    "name": "Mr IP Smith",
+                                    "role": "liquidator",
+                                    "appointed_on": "2023-06-15",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = CompaniesHouseClient(api_key="test-key")
+        c._client = httpx.AsyncClient(
+            base_url="https://api.company-information.service.gov.uk",
+            transport=transport,
+            auth=("test-key", ""),
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_get_insolvency(self, client):
+        result = await client.get_insolvency("00000001")
+        assert len(result["cases"]) == 1
+        assert result["cases"][0]["type"] == "compulsory-liquidation"
+        assert result["cases"][0]["practitioners"][0]["name"] == "Mr IP Smith"
+
+
+class TestCompaniesHouseDissolved:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/dissolved-search/companies": {
+                "json": {
+                    "total_results": 1,
+                    "items": [
+                        {
+                            "company_number": "99999999",
+                            "company_name": "DEFUNCT SHELL LTD",
+                            "company_status": "dissolved",
+                            "date_of_cessation": "2022-03-01",
+                            "date_of_creation": "2015-01-01",
+                        }
+                    ],
+                }
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = CompaniesHouseClient(api_key="test-key")
+        c._client = httpx.AsyncClient(
+            base_url="https://api.company-information.service.gov.uk",
+            transport=transport,
+            auth=("test-key", ""),
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_search_dissolved(self, client):
+        result = await client.search_dissolved("Defunct Shell")
+        assert result["total_results"] == 1
+        assert result["items"][0]["company_name"] == "DEFUNCT SHELL LTD"
+        assert result["items"][0]["company_status"] == "dissolved"
+
+
+# =============================================================================
+# GLEIF — enhanced search + relationships tests
+# =============================================================================
+
+class TestGLEIFEnhancedSearch:
+    LEI_RECORD = TestGLEIFClient.LEI_RECORD
+
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/lei-records": {
+                "json": {
+                    "meta": {"pagination": {"total": 1}},
+                    "data": [self.LEI_RECORD],
+                }
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = GLEIFClient()
+        c._client = httpx.AsyncClient(
+            base_url="https://api.gleif.org/api/v1",
+            transport=transport,
+        )
+        c._transport = transport
+        return c, transport
+
+    @pytest.mark.asyncio
+    async def test_search_with_jurisdiction_filter(self, client):
+        c, transport = client
+        result = await c.search("Test", jurisdiction="US-DE")
+        assert result["total"] == 1
+        req = transport.requests[0]
+        assert "filter%5Bentity.jurisdiction%5D" in str(req.url) or "filter[entity.jurisdiction]" in str(req.url)
+
+    @pytest.mark.asyncio
+    async def test_search_with_status_filter(self, client):
+        c, transport = client
+        result = await c.search("Test", entity_status="ACTIVE")
+        assert result["total"] == 1
+        req = transport.requests[0]
+        assert "ACTIVE" in str(req.url)
+
+    @pytest.mark.asyncio
+    async def test_search_with_multiple_filters(self, client):
+        c, transport = client
+        result = await c.search(
+            "Test", jurisdiction="GB", entity_status="ACTIVE",
+            legal_form="8888", category="GENERAL",
+        )
+        assert result["total"] == 1
+
+
+class TestGLEIFRelationships:
+    LEI_RECORD = TestGLEIFClient.LEI_RECORD
+
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/direct-parent": {
+                "json": {
+                    "data": [{
+                        "attributes": {
+                            "relationship": {
+                                "endNode": {"id": "PARENT_LEI_001"},
+                            },
+                        },
+                    }],
+                },
+            },
+            "/ultimate-parent": {
+                "json": {
+                    "data": [{
+                        "attributes": {
+                            "relationship": {
+                                "endNode": {"id": "ULTIMATE_LEI_001"},
+                            },
+                        },
+                    }],
+                },
+            },
+            "/direct-child": {
+                "json": {
+                    "data": [
+                        {
+                            "attributes": {
+                                "relationship": {
+                                    "startNode": {"id": "CHILD_LEI_001"},
+                                },
+                            },
+                        },
+                        {
+                            "attributes": {
+                                "relationship": {
+                                    "startNode": {"id": "CHILD_LEI_002"},
+                                },
+                            },
+                        },
+                    ],
+                },
+            },
+            "/ultimate-child": {
+                "json": {
+                    "data": [
+                        {
+                            "attributes": {
+                                "relationship": {
+                                    "startNode": {"id": "CHILD_LEI_001"},
+                                },
+                            },
+                        },
+                        {
+                            "attributes": {
+                                "relationship": {
+                                    "startNode": {"id": "CHILD_LEI_002"},
+                                },
+                            },
+                        },
+                        {
+                            "attributes": {
+                                "relationship": {
+                                    "startNode": {"id": "GRANDCHILD_LEI_001"},
+                                },
+                            },
+                        },
+                    ],
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = GLEIFClient()
+        c._client = httpx.AsyncClient(
+            base_url="https://api.gleif.org/api/v1",
+            transport=transport,
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_get_all_relationships(self, client):
+        result = await client.get_all_relationships("549300TEST00LEI001")
+        assert result["lei"] == "549300TEST00LEI001"
+        assert result["direct_parent"] == "PARENT_LEI_001"
+        assert result["ultimate_parent"] == "ULTIMATE_LEI_001"
+        assert len(result["direct_children"]) == 2
+        assert len(result["all_children"]) == 3
+        assert "GRANDCHILD_LEI_001" in result["all_children"]
+
+
+# =============================================================================
+# CourtListener — new tools tests
+# =============================================================================
+
+class TestCourtListenerOpinion:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/opinions/99999": {
+                "json": {
+                    "id": 99999,
+                    "type": "010combined",
+                    "author_str": "Roberts, C.J.",
+                    "plain_text": "This is the opinion text for the case.",
+                    "download_url": "/path/to/opinion.pdf",
+                    "date_filed": "2024-06-15",
+                    "cluster": "https://www.courtlistener.com/api/rest/v4/clusters/12345/",
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = CourtListenerClient(api_token="test-token")
+        c._client = httpx.AsyncClient(
+            base_url="https://www.courtlistener.com/api/rest/v4",
+            transport=transport,
+            headers={"Authorization": "Token test-token"},
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_get_opinion(self, client):
+        result = await client.get_opinion(99999)
+        assert result["id"] == 99999
+        assert result["author_str"] == "Roberts, C.J."
+        assert "opinion text" in result["plain_text"]
+
+
+class TestCourtListenerPerson:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/people/42": {
+                "json": {
+                    "id": 42,
+                    "name_full": "John G. Roberts Jr.",
+                    "date_dob": "1955-01-27",
+                    "positions": [
+                        {
+                            "court": {"short_name": "SCOTUS"},
+                            "position_type": "Chief Justice",
+                            "date_start": "2005-09-29",
+                        },
+                    ],
+                },
+            },
+            "/people/": {
+                "json": {
+                    "count": 1,
+                    "results": [
+                        {"id": 42, "name_full": "John G. Roberts Jr."},
+                    ],
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = CourtListenerClient(api_token="test-token")
+        c._client = httpx.AsyncClient(
+            base_url="https://www.courtlistener.com/api/rest/v4",
+            transport=transport,
+            headers={"Authorization": "Token test-token"},
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_get_person(self, client):
+        result = await client.get_person(42)
+        assert result["id"] == 42
+        assert result["name_full"] == "John G. Roberts Jr."
+        assert len(result["positions"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_search_people_exposed(self, client):
+        result = await client.search_people("Roberts")
+        assert result["count"] == 1
+
+
+class TestCourtListenerBankruptcy:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/search/": {
+                "json": {
+                    "count": 1,
+                    "results": [
+                        {
+                            "docket_id": 55555,
+                            "caseName": "In re: Test Corp",
+                            "court": "bankr. S.D.N.Y.",
+                            "dateFiled": "2024-03-01",
+                            "nature_of_suit": "Bankruptcy",
+                        }
+                    ],
+                }
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = CourtListenerClient(api_token="test-token")
+        c._client = httpx.AsyncClient(
+            base_url="https://www.courtlistener.com/api/rest/v4",
+            transport=transport,
+            headers={"Authorization": "Token test-token"},
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_search_with_nature_of_suit(self, client):
+        result = await client.search("Test Corp", nature_of_suit="422")
+        assert result["count"] == 1
+        assert result["results"][0]["caseName"] == "In re: Test Corp"
+
+
+# =============================================================================
+# SEC EDGAR — new tools tests
+# =============================================================================
+
+class TestSECProxyStatement:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/submissions/": {
+                "json": {
+                    "cik": "0000320193",
+                    "name": "Apple Inc.",
+                    "tickers": ["AAPL"],
+                    "exchanges": ["Nasdaq"],
+                    "sic": "3571",
+                    "stateOfIncorporation": "CA",
+                    "fiscalYearEnd": "0930",
+                    "filings": {
+                        "recent": {
+                            "accessionNumber": ["0000320193-24-000099"],
+                            "form": ["DEF 14A"],
+                            "filingDate": ["2024-01-15"],
+                            "primaryDocument": ["proxy2024.htm"],
+                            "primaryDocDescription": ["DEF 14A"],
+                        }
+                    },
+                    "addresses": {"mailing": {}, "business": {}},
+                }
+            },
+            "/Archives/": {
+                "html": """
+                <html><body>
+                <h2>Compensation Discussion and Analysis</h2>
+                <table>
+                <tr><th>Name</th><th>Title</th><th>Salary</th><th>Bonus</th><th>Total</th></tr>
+                <tr><td>Tim Cook</td><td>CEO</td><td>$3,000,000</td><td>$0</td><td>$63,209,365</td></tr>
+                <tr><td>Luca Maestri</td><td>CFO</td><td>$1,000,000</td><td>$0</td><td>$26,987,466</td></tr>
+                </table>
+                <h2>Director Nominees</h2>
+                <p>The following directors are nominated:</p>
+                <p><strong>James Bell</strong>, Independent Director</p>
+                <p><strong>Al Gore</strong>, Independent Director</p>
+                </body></html>
+                """,
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = SECEdgarClient(user_agent="test-agent test@test.com")
+        c._efts = httpx.AsyncClient(
+            base_url="https://efts.sec.gov/LATEST", transport=transport,
+        )
+        c._data = httpx.AsyncClient(
+            base_url="https://data.sec.gov", transport=transport,
+        )
+        c._www = httpx.AsyncClient(
+            base_url="https://www.sec.gov", transport=transport,
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_get_proxy_statement(self, client):
+        result = await client.get_proxy_statement(320193)
+        assert result["name"] == "Apple Inc."
+        assert result["filing_date"] == "2024-01-15"
+        assert isinstance(result.get("executives"), list)
+        assert isinstance(result.get("board_members"), list)
+
+
+class TestSEC8KEvents:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/submissions/": {
+                "json": {
+                    "cik": "0000320193",
+                    "name": "Apple Inc.",
+                    "tickers": ["AAPL"],
+                    "exchanges": ["Nasdaq"],
+                    "sic": "3571",
+                    "stateOfIncorporation": "CA",
+                    "fiscalYearEnd": "0930",
+                    "filings": {
+                        "recent": {
+                            "accessionNumber": [
+                                "0000320193-24-000050",
+                                "0000320193-24-000051",
+                            ],
+                            "form": ["8-K", "8-K"],
+                            "filingDate": ["2024-06-01", "2024-03-15"],
+                            "primaryDocument": ["event1.htm", "event2.htm"],
+                            "primaryDocDescription": ["8-K", "8-K"],
+                        }
+                    },
+                    "addresses": {"mailing": {}, "business": {}},
+                }
+            },
+            "/Archives/": {
+                "html": """
+                <html><body>
+                <h3>Item 2.01 Completion of Acquisition</h3>
+                <p>On June 1, 2024, the Company completed its acquisition of
+                AI Startup Inc. for approximately $2 billion in cash.</p>
+                <h3>Item 5.02 Departure of Directors or Certain Officers</h3>
+                <p>On June 1, 2024, John Doe resigned as SVP of Engineering.</p>
+                </body></html>
+                """,
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = SECEdgarClient(user_agent="test-agent test@test.com")
+        c._efts = httpx.AsyncClient(
+            base_url="https://efts.sec.gov/LATEST", transport=transport,
+        )
+        c._data = httpx.AsyncClient(
+            base_url="https://data.sec.gov", transport=transport,
+        )
+        c._www = httpx.AsyncClient(
+            base_url="https://www.sec.gov", transport=transport,
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_get_8k_events(self, client):
+        result = await client.get_8k_events(320193, limit=2)
+        assert result["name"] == "Apple Inc."
+        assert isinstance(result["events"], list)
+        assert len(result["events"]) <= 2
+
+
+class TestSECAmendments:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/submissions/": {
+                "json": {
+                    "cik": "0000320193",
+                    "name": "Apple Inc.",
+                    "tickers": ["AAPL"],
+                    "exchanges": ["Nasdaq"],
+                    "sic": "3571",
+                    "stateOfIncorporation": "CA",
+                    "fiscalYearEnd": "0930",
+                    "filings": {
+                        "recent": {
+                            "accessionNumber": [
+                                "0000320193-24-000001",
+                                "0000320193-24-000002",
+                                "0000320193-24-000003",
+                            ],
+                            "form": ["10-K", "10-K/A", "10-Q/A"],
+                            "filingDate": [
+                                "2024-11-01", "2024-12-15", "2025-01-10",
+                            ],
+                            "primaryDocument": ["10k.htm", "10ka.htm", "10qa.htm"],
+                            "primaryDocDescription": [
+                                "10-K", "10-K/A", "10-Q/A",
+                            ],
+                        }
+                    },
+                    "addresses": {"mailing": {}, "business": {}},
+                }
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = SECEdgarClient(user_agent="test-agent test@test.com")
+        c._efts = httpx.AsyncClient(
+            base_url="https://efts.sec.gov/LATEST", transport=transport,
+        )
+        c._data = httpx.AsyncClient(
+            base_url="https://data.sec.gov", transport=transport,
+        )
+        c._www = httpx.AsyncClient(
+            base_url="https://www.sec.gov", transport=transport,
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_get_amendments(self, client):
+        result = await client.get_amendments(320193)
+        assert result["name"] == "Apple Inc."
+        assert result["count"] == 2
+        assert all(
+            a["form"] in ("10-K/A", "10-Q/A")
+            for a in result["amendments"]
+        )

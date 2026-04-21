@@ -1,0 +1,74 @@
+name: insider_self_dealing
+title: Insider Self-Dealing
+description: >
+  SEC proxy filings show executive compensation alongside related
+  party transactions and 8-K material agreements where board members
+  or executives overlap with counterparties. This indicates potential
+  self-dealing — directors steering contracts to entities they control
+  or benefit from. SEC enforcement actions frequently cite related
+  party transactions as evidence of governance failures.
+risk_level: MEDIUM
+status: PROPOSED
+sources:
+  - sec_edgar
+references:
+  - title: "SEC — Related Party Transactions (Regulation S-K Item 404)"
+    url: https://www.sec.gov/rules/final/2006/33-8732a.htm
+
+detection:
+  conditions:
+    - id: material_agreements
+      description: Company has recent 8-K Item 1.01 (material agreements)
+      type: sec_event_type
+      items: ["1.01"]
+
+    - id: officer_overlap
+      description: Officers shared between entity and counterparty
+      type: officer_overlap
+      min_shared_officers: 1
+
+    - id: amendment_pattern
+      description: Filing amendments suggesting corrections to disclosures
+      type: amendment_count
+      min_count: 1
+      optional: true
+
+  indicators:
+    - Board member also serves on counterparty entity
+    - Material agreement filed shortly after proxy statement
+    - Related party transactions exceeding $120K threshold (Item 404)
+    - Amendment to correct related party disclosures
+
+  actionable_significance:
+    applies_to: US
+    note: >
+      This pattern applies to US SEC-registered companies. The
+      structural signal (officer overlap between a company and its
+      transaction counterparties) may indicate governance risk in
+      any jurisdiction, but the specific disclosure obligations and
+      enforcement mechanisms below are US-specific.
+    violation: >
+      Self-dealing by corporate insiders violates fiduciary duties
+      under state corporate law and may constitute securities fraud
+      under SEC Rule 10b-5. Undisclosed related party transactions
+      violate Regulation S-K Item 404 (17 CFR 229.404). If material,
+      failure to disclose can trigger SEC enforcement action,
+      shareholder derivative suits, and criminal referral to DOJ.
+    enforcement_body: >
+      SEC Division of Enforcement (securities violations),
+      DOJ Fraud Section (criminal prosecution), state attorneys
+      general (corporate governance), shareholder plaintiffs
+      (derivative actions).
+    next_steps:
+      - Cross-reference board member names from DEF 14A against counterparties in Item 13 (related party transactions)
+      - Check if the material agreement (8-K Item 1.01) names any entity controlled by a board member
+      - Look for subsequent amendments (10-K/A) that corrected related party disclosures
+      - Review executive compensation for payments to entities linked to insiders
+      - Check if any SEC comment letters or enforcement actions followed
+
+  scoring:
+    high: [material_agreements, officer_overlap]
+    medium: material_agreements
+    low: null
+
+  data_sources: [sec]

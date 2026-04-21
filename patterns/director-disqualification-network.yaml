@@ -1,0 +1,74 @@
+name: director_disqualification_network
+title: Director Disqualification Network
+description: >
+  Multiple companies sharing a disqualified director. Disqualified
+  persons are prohibited from acting as company directors under the
+  Company Directors Disqualification Act 1986 (CDDA). Continued
+  involvement — directly or through proxies — constitutes a criminal
+  offence under s.13 CDDA. The UK Insolvency Service publishes
+  disqualification data; cross-referencing with active company
+  directorships reveals ongoing non-compliance.
+risk_level: HIGH
+status: PROPOSED
+sources:
+  - companies_house_disqualified_register
+  - uk_insolvency_service
+references:
+  - title: "Company Directors Disqualification Act 1986"
+    url: https://www.legislation.gov.uk/ukpga/1986/46/contents
+  - title: "UK Insolvency Service — Director Disqualifications"
+    url: https://www.gov.uk/government/collections/monthly-insolvency-statistics
+
+detection:
+  conditions:
+    - id: disqualified_officer
+      description: At least one director in the network is disqualified
+      type: officer_disqualification
+
+    - id: shared_officers
+      description: Multiple companies share the same officer
+      type: officer_overlap
+      min_shared_officers: 1
+
+    - id: insolvency_history
+      description: Connected company has insolvency history
+      type: insolvency_status
+      optional: true
+
+  indicators:
+    - Director banned under CDDA 1986 still appearing as officer
+    - Same person linked to multiple active companies
+    - Companies sharing disqualified director also have insolvency cases
+    - Use of proxy directors to circumvent disqualification
+
+  actionable_significance:
+    applies_to: UK
+    note: >
+      This pattern is specific to UK-registered companies and the
+      UK disqualification regime. The structural signal (shared
+      officers across distressed companies) may indicate risk in
+      any jurisdiction, but the legal consequences below apply
+      only to UK entities.
+    violation: >
+      Acting as a company director while disqualified is a criminal
+      offence under s.13 Company Directors Disqualification Act 1986,
+      punishable by up to 2 years imprisonment and/or a fine. The
+      disqualified person is also personally liable for all debts
+      incurred while acting as director.
+    enforcement_body: >
+      UK Insolvency Service (investigation and enforcement),
+      Companies House (registration data), Crown Prosecution
+      Service (criminal prosecution).
+    next_steps:
+      - Verify the disqualification is current (check dates and whether any appeal succeeded)
+      - Confirm the person is the same individual (not a name coincidence) via date of birth and address
+      - Check if the active companies show signs of distress or fraud
+      - Report to the Insolvency Service if the person appears to be acting as director while disqualified
+      - Consider whether third parties (creditors, counterparties) should be alerted
+
+  scoring:
+    high: [disqualified_officer, shared_officers]
+    medium: disqualified_officer
+    low: null
+
+  data_sources: [companies_house]
