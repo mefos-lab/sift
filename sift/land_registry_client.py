@@ -5,6 +5,8 @@ from __future__ import annotations
 import httpx
 from typing import Any
 
+from sift import __version__
+
 # Price Paid linked data endpoint (free, no auth)
 PPD_BASE = "https://landregistry.data.gov.uk"
 
@@ -21,7 +23,7 @@ class LandRegistryClient:
     def __init__(self, timeout: float = 30.0):
         self._client = httpx.AsyncClient(
             timeout=timeout,
-            headers={"User-Agent": "sift/0.4.0", "Accept": "application/json"},
+            headers={"User-Agent": f"sift/{__version__}", "Accept": "application/json"},
         )
 
     async def close(self):
@@ -112,6 +114,160 @@ LIMIT {limit}
         )
         resp.raise_for_status()
         return resp.json()
+
+    async def search_address_history(
+        self,
+        paon: str,
+        street: str,
+        town: str,
+        postcode: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """Get all transactions at a specific address over time.
+
+        Returns transactions ordered by date ascending to show the
+        property's transaction chain.
+        """
+        safe_paon = paon.replace("'", "\\'").upper()
+        safe_street = street.replace("'", "\\'").upper()
+        safe_town = town.replace("'", "\\'").upper()
+        pc_filter = ""
+        if postcode:
+            safe_pc = postcode.replace("'", "\\'").upper().strip()
+            pc_filter = f"FILTER(?postcode = '{safe_pc}')"
+
+        sparql = f"""
+PREFIX lrppi: <http://landregistry.data.gov.uk/def/ppi/>
+PREFIX lrcommon: <http://landregistry.data.gov.uk/def/common/>
+
+SELECT ?transaction ?amount ?date ?paon ?saon ?street ?town ?county ?postcode ?type
+WHERE {{
+    ?transaction lrppi:pricePaid ?amount ;
+                 lrppi:transactionDate ?date ;
+                 lrppi:propertyAddress ?addr ;
+                 lrppi:propertyType ?type .
+    ?addr lrcommon:paon ?paon .
+    OPTIONAL {{ ?addr lrcommon:saon ?saon }}
+    ?addr lrcommon:street ?street ;
+          lrcommon:town ?town .
+    OPTIONAL {{ ?addr lrcommon:county ?county }}
+    ?addr lrcommon:postcode ?postcode .
+    FILTER(UCASE(?paon) = '{safe_paon}')
+    FILTER(UCASE(?street) = '{safe_street}')
+    FILTER(UCASE(?town) = '{safe_town}')
+    {pc_filter}
+}}
+ORDER BY ASC(?date)
+LIMIT {limit}
+"""
+        resp = await self._client.get(
+            f"{PPD_BASE}/app/root/qonsole/query",
+            params={"query": sparql, "output": "json"},
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+        bindings = raw.get("results", {}).get("bindings", [])
+        return {
+            "total": len(bindings),
+            "results": [_normalize_transaction(b) for b in bindings],
+        }
+
+    async def get_area_stats(
+        self,
+        town: str,
+        year_from: int | None = None,
+        year_to: int | None = None,
+    ) -> dict[str, Any]:
+        """Get price statistics (avg/min/max/count) by year for a town."""
+        safe_town = town.replace("'", "\\'").upper()
+        year_filters = []
+        if year_from is not None:
+            year_filters.append(f"FILTER(?year >= {year_from})")
+        if year_to is not None:
+            year_filters.append(f"FILTER(?year <= {year_to})")
+        year_block = "\n    ".join(year_filters)
+
+        sparql = f"""
+PREFIX lrppi: <http://landregistry.data.gov.uk/def/ppi/>
+PREFIX lrcommon: <http://landregistry.data.gov.uk/def/common/>
+
+SELECT ?year (AVG(?amount) AS ?avg_price) (MIN(?amount) AS ?min_price) (MAX(?amount) AS ?max_price) (COUNT(?transaction) AS ?count)
+WHERE {{
+    ?transaction lrppi:pricePaid ?amount ;
+                 lrppi:transactionDate ?date ;
+                 lrppi:propertyAddress ?addr .
+    ?addr lrcommon:town ?town .
+    FILTER(UCASE(?town) = '{safe_town}')
+    BIND(YEAR(?date) AS ?year)
+    {year_block}
+}}
+GROUP BY ?year
+ORDER BY ASC(?year)
+"""
+        resp = await self._client.get(
+            f"{PPD_BASE}/app/root/qonsole/query",
+            params={"query": sparql, "output": "json"},
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+        bindings = raw.get("results", {}).get("bindings", [])
+        stats = []
+        for b in bindings:
+            def _val(key: str) -> str:
+                return b.get(key, {}).get("value", "")
+            stats.append({
+                "year": _val("year"),
+                "avg_price": float(_val("avg_price")) if _val("avg_price") else None,
+                "min_price": int(float(_val("min_price"))) if _val("min_price") else None,
+                "max_price": int(float(_val("max_price"))) if _val("max_price") else None,
+                "count": int(_val("count")) if _val("count") else 0,
+            })
+        return {"town": town, "stats": stats}
+
+    async def search_high_value(
+        self,
+        town: str,
+        min_price: int = 1_000_000,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """Search for high-value property transactions in a town.
+
+        High-value purchases are a key money laundering indicator.
+        """
+        safe_town = town.replace("'", "\\'").upper()
+        sparql = f"""
+PREFIX lrppi: <http://landregistry.data.gov.uk/def/ppi/>
+PREFIX lrcommon: <http://landregistry.data.gov.uk/def/common/>
+
+SELECT ?transaction ?amount ?date ?paon ?saon ?street ?town ?county ?postcode ?type
+WHERE {{
+    ?transaction lrppi:pricePaid ?amount ;
+                 lrppi:transactionDate ?date ;
+                 lrppi:propertyAddress ?addr ;
+                 lrppi:propertyType ?type .
+    ?addr lrcommon:paon ?paon .
+    OPTIONAL {{ ?addr lrcommon:saon ?saon }}
+    ?addr lrcommon:street ?street ;
+          lrcommon:town ?town .
+    OPTIONAL {{ ?addr lrcommon:county ?county }}
+    ?addr lrcommon:postcode ?postcode .
+    FILTER(UCASE(?town) = '{safe_town}')
+    FILTER(?amount >= {min_price})
+}}
+ORDER BY DESC(?amount)
+LIMIT {limit}
+"""
+        resp = await self._client.get(
+            f"{PPD_BASE}/app/root/qonsole/query",
+            params={"query": sparql, "output": "json"},
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+        bindings = raw.get("results", {}).get("bindings", [])
+        return {
+            "total": len(bindings),
+            "results": [_normalize_transaction(b) for b in bindings],
+        }
 
     async def search_postcode(
         self, postcode: str, limit: int = 50,

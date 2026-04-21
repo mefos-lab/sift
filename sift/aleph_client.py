@@ -5,6 +5,8 @@ from __future__ import annotations
 import httpx
 from typing import Any
 
+from sift import __version__
+
 BASE_URL = "https://aleph.occrp.org/api/2"
 
 
@@ -17,7 +19,7 @@ class AlephClient:
     """
 
     def __init__(self, api_key: str | None = None, timeout: float = 30.0):
-        headers: dict[str, str] = {"User-Agent": "sift/0.4.0"}
+        headers: dict[str, str] = {"User-Agent": f"sift/{__version__}"}
         if api_key:
             headers["Authorization"] = f"ApiKey {api_key}"
         self._client = httpx.AsyncClient(
@@ -75,6 +77,64 @@ class AlephClient:
         return {
             "total": raw.get("total", 0),
             "results": [_normalize_entity(r) for r in raw.get("results", [])],
+        }
+
+    async def expand_entity(
+        self, entity_id: str, limit: int = 50,
+    ) -> dict[str, Any]:
+        """Expand an entity to discover connected entities and relationships."""
+        resp = await self._client.get(
+            f"/entities/{entity_id}/expand",
+            params={"limit": limit},
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+        return {
+            "total": raw.get("total", 0),
+            "results": [_normalize_entity(r) for r in raw.get("results", [])],
+        }
+
+    async def search_collection_documents(
+        self,
+        collection_id: int | str,
+        query: str = "",
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """Search documents within a specific collection."""
+        params: dict[str, Any] = {
+            "filter:collection_id": collection_id,
+            "filter:schemata": "Document",
+            "limit": limit,
+        }
+        if query:
+            params["q"] = query
+        resp = await self._client.get("/entities", params=params)
+        resp.raise_for_status()
+        raw = resp.json()
+        return {
+            "total": raw.get("total", 0),
+            "results": [_normalize_entity(r) for r in raw.get("results", [])],
+        }
+
+    async def get_entity_relationships(
+        self,
+        entity_id: str,
+        limit: int = 50,
+        schemata: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Get relationships for an entity, optionally filtered by schema type.
+
+        Uses the expand endpoint and filters results by relationship schemata
+        (e.g., Ownership, Directorship, Membership).
+        """
+        expanded = await self.expand_entity(entity_id, limit=limit)
+        results = expanded.get("results", [])
+        if schemata:
+            schemata_set = set(schemata)
+            results = [r for r in results if r.get("schema") in schemata_set]
+        return {
+            "entity_id": entity_id,
+            "relationships": results,
         }
 
     async def search_collections(

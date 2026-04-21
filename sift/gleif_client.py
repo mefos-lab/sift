@@ -5,6 +5,8 @@ from __future__ import annotations
 import httpx
 from typing import Any
 
+from sift import __version__
+
 BASE_URL = "https://api.gleif.org/api/v1"
 
 
@@ -18,18 +20,39 @@ class GLEIFClient:
         self._client = httpx.AsyncClient(
             base_url=BASE_URL,
             timeout=timeout,
-            headers={"User-Agent": "sift/0.4.0"},
+            headers={"User-Agent": f"sift/{__version__}"},
         )
 
     async def close(self):
         await self._client.aclose()
 
-    async def search(self, query: str, page_size: int = 10) -> dict[str, Any]:
-        """Full-text search for LEI records by company name."""
-        resp = await self._client.get(
-            "/lei-records",
-            params={"filter[fulltext]": query, "page[size]": page_size},
-        )
+    async def search(
+        self,
+        query: str,
+        page_size: int = 10,
+        jurisdiction: str | None = None,
+        entity_status: str | None = None,
+        legal_form: str | None = None,
+        category: str | None = None,
+    ) -> dict[str, Any]:
+        """Full-text search for LEI records by company name.
+
+        Optional filters narrow results by jurisdiction (e.g. 'US-DE', 'GB'),
+        entity status ('ACTIVE', 'INACTIVE'), legal form ID, or category.
+        """
+        params: dict[str, Any] = {
+            "filter[fulltext]": query,
+            "page[size]": page_size,
+        }
+        if jurisdiction:
+            params["filter[entity.jurisdiction]"] = jurisdiction
+        if entity_status:
+            params["filter[entity.status]"] = entity_status
+        if legal_form:
+            params["filter[entity.legalForm.id]"] = legal_form
+        if category:
+            params["filter[entity.category]"] = category
+        resp = await self._client.get("/lei-records", params=params)
         resp.raise_for_status()
         raw = resp.json()
         return {
@@ -112,6 +135,98 @@ class GLEIFClient:
                     child_lei = start_node.get("id")
                     if child_lei and child_lei != lei:
                         result["children"].append(child_lei)
+        except httpx.HTTPError:
+            pass
+
+        return result
+
+    async def get_all_relationships(self, lei: str) -> dict[str, Any]:
+        """Get full ownership tree: parents + direct children + all descendants."""
+        result: dict[str, Any] = {
+            "lei": lei,
+            "direct_parent": None,
+            "ultimate_parent": None,
+            "direct_children": [],
+            "all_children": [],
+        }
+
+        # Direct parent
+        try:
+            resp = await self._client.get(
+                f"/lei-records/{lei}/direct-parent-relationship"
+            )
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                if data:
+                    rel = data[0] if isinstance(data, list) else data
+                    end_node = (
+                        rel.get("attributes", {})
+                        .get("relationship", {})
+                        .get("endNode", {})
+                    )
+                    parent_lei = end_node.get("id")
+                    if parent_lei and parent_lei != lei:
+                        result["direct_parent"] = parent_lei
+        except httpx.HTTPError:
+            pass
+
+        # Ultimate parent
+        try:
+            resp = await self._client.get(
+                f"/lei-records/{lei}/ultimate-parent-relationship"
+            )
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                if data:
+                    rel = data[0] if isinstance(data, list) else data
+                    end_node = (
+                        rel.get("attributes", {})
+                        .get("relationship", {})
+                        .get("endNode", {})
+                    )
+                    parent_lei = end_node.get("id")
+                    if parent_lei and parent_lei != lei:
+                        result["ultimate_parent"] = parent_lei
+        except httpx.HTTPError:
+            pass
+
+        # Direct children
+        try:
+            resp = await self._client.get(
+                f"/lei-records/{lei}/direct-child-relationships",
+                params={"page[size]": 50},
+            )
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                for rel in data:
+                    start_node = (
+                        rel.get("attributes", {})
+                        .get("relationship", {})
+                        .get("startNode", {})
+                    )
+                    child_lei = start_node.get("id")
+                    if child_lei and child_lei != lei:
+                        result["direct_children"].append(child_lei)
+        except httpx.HTTPError:
+            pass
+
+        # All descendants (ultimate children)
+        try:
+            resp = await self._client.get(
+                f"/lei-records/{lei}/ultimate-child-relationships",
+                params={"page[size]": 100},
+            )
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                for rel in data:
+                    start_node = (
+                        rel.get("attributes", {})
+                        .get("relationship", {})
+                        .get("startNode", {})
+                    )
+                    child_lei = start_node.get("id")
+                    if child_lei and child_lei != lei:
+                        result["all_children"].append(child_lei)
         except httpx.HTTPError:
             pass
 

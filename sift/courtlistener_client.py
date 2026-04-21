@@ -8,6 +8,8 @@ import re
 import httpx
 from typing import Any
 
+from sift import __version__
+
 _AMOUNT_RE = re.compile(
     r"\$\s*([\d,]+(?:\.\d{2})?)\s*(?:million|billion)?",
     re.IGNORECASE,
@@ -24,7 +26,7 @@ class CourtListenerClient:
     """
 
     def __init__(self, api_token: str | None = None, timeout: float = 30.0):
-        headers: dict[str, str] = {"User-Agent": "sift/0.4.0"}
+        headers: dict[str, str] = {"User-Agent": f"sift/{__version__}"}
         if api_token:
             headers["Authorization"] = f"Token {api_token}"
         self._client = httpx.AsyncClient(
@@ -43,6 +45,7 @@ class CourtListenerClient:
         court: str | None = None,
         filed_after: str | None = None,
         filed_before: str | None = None,
+        nature_of_suit: str | None = None,
         page: int = 1,
     ) -> dict[str, Any]:
         """Search court opinions (type='o') or docket entries (type='r').
@@ -54,6 +57,7 @@ class CourtListenerClient:
         court : Court ID filter (optional)
         filed_after : ISO date (optional)
         filed_before : ISO date (optional)
+        nature_of_suit : Nature of suit code for filtering (e.g. '422' for bankruptcy)
         """
         params: dict[str, Any] = {"q": query, "type": type, "page": page}
         if court:
@@ -62,8 +66,31 @@ class CourtListenerClient:
             params["filed_after"] = filed_after
         if filed_before:
             params["filed_before"] = filed_before
+        if nature_of_suit:
+            params["nature_of_suit"] = nature_of_suit
 
         resp = await self._client.get("/search/", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def get_opinion(self, opinion_id: int) -> dict[str, Any]:
+        """Get a court opinion by ID, including text if available."""
+        resp = await self._client.get(f"/opinions/{opinion_id}/")
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            "id": data.get("id"),
+            "type": data.get("type", ""),
+            "author_str": data.get("author_str", ""),
+            "plain_text": data.get("plain_text", ""),
+            "download_url": data.get("download_url", ""),
+            "date_filed": data.get("date_filed", ""),
+            "cluster": data.get("cluster", ""),
+        }
+
+    async def get_person(self, person_id: int) -> dict[str, Any]:
+        """Get judge or attorney details by person ID."""
+        resp = await self._client.get(f"/people/{person_id}/")
         resp.raise_for_status()
         return resp.json()
 

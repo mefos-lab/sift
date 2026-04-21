@@ -467,6 +467,18 @@
   }
   .complaint-text.open { display: block; }
 
+  /* Tooltip-enabled elements */
+  .has-tooltip { cursor: help; border-bottom: 1px dotted var(--text-dim); }
+
+  /* Corporate Risk panel */
+  .corporate-risk-container { padding: 24px; max-width: 1100px; }
+  /* Material Events panel */
+  .events-container { padding: 24px; max-width: 1100px; }
+  /* Property panel */
+  .property-container { padding: 24px; max-width: 1100px; }
+  /* Documents panel */
+  .documents-container { padding: 24px; max-width: 1100px; }
+
   /* Temporal overlap markers on timeline */
   .temporal-overlap-line { stroke: var(--pep-color); stroke-width: 1.5; stroke-dasharray: 4,3; }
   .temporal-overlap-label { font-size: 10px; fill: var(--pep-color); font-weight: 600; }
@@ -495,6 +507,10 @@
   <button class="tab-btn enrichment-tab" data-tab="financials" title="SEC XBRL financial metrics, Companies House accounts, and charge register.">Financials</button>
   <button class="tab-btn enrichment-tab" data-tab="people" title="Family relationships, career history, education, and political positions from Wikidata.">People</button>
   <button class="tab-btn enrichment-tab" data-tab="litigation" title="Court cases with parties, nature of suit, jurisdiction, and complaint text.">Litigation</button>
+  <button class="tab-btn enrichment-tab" data-tab="corporate-risk" title="Insolvency cases, disqualified directors, filing amendments, and other corporate risk signals.">Corporate Risk</button>
+  <button class="tab-btn enrichment-tab" data-tab="events" title="SEC 8-K material events, executive compensation, and board members from proxy statements.">Material Events</button>
+  <button class="tab-btn enrichment-tab" data-tab="property" title="UK property transactions, price history, and high-value purchase data from Land Registry.">Property</button>
+  <button class="tab-btn enrichment-tab" data-tab="documents" title="Leaked documents, contracts, and filings from OCCRP Aleph investigative datasets.">Documents</button>
 </div>
 
 <!-- Tab: Overview -->
@@ -806,6 +822,50 @@
       Court cases, docket details, parties, and complaint text from CourtListener.
     </p>
     <div id="litigationContent"></div>
+  </div>
+</div>
+
+<!-- Tab: Corporate Risk (enrichment — conditionally shown) -->
+<div class="tab-content" id="tab-corporate-risk">
+  <div class="corporate-risk-container">
+    <h3 style="margin-bottom:4px">Corporate Risk Signals</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      Insolvency cases, disqualified directors, and filing amendments from UK Companies House and SEC EDGAR.
+    </p>
+    <div id="corporateRiskContent"></div>
+  </div>
+</div>
+
+<!-- Tab: Material Events (enrichment — conditionally shown) -->
+<div class="tab-content" id="tab-events">
+  <div class="events-container">
+    <h3 style="margin-bottom:4px">Material Events</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      SEC 8-K filings (acquisitions, officer departures, material agreements), executive compensation, and board composition from proxy statements.
+    </p>
+    <div id="eventsContent"></div>
+  </div>
+</div>
+
+<!-- Tab: Property (enrichment — conditionally shown) -->
+<div class="tab-content" id="tab-property">
+  <div class="property-container">
+    <h3 style="margin-bottom:4px">Property Transactions</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      UK Land Registry Price Paid Data — property transactions, price history, and high-value purchases.
+    </p>
+    <div id="propertyContent"></div>
+  </div>
+</div>
+
+<!-- Tab: Documents (enrichment — conditionally shown) -->
+<div class="tab-content" id="tab-documents">
+  <div class="documents-container">
+    <h3 style="margin-bottom:4px">Source Documents</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;max-width:700px;line-height:1.6">
+      Leaked documents, contracts, and filings from OCCRP Aleph investigative datasets.
+    </p>
+    <div id="documentsContent"></div>
   </div>
 </div>
 
@@ -1436,7 +1496,9 @@ if (data.mode === 'scan') {
     // === FOOTER ===
     var footer = document.createElement('div');
     footer.style.cssText = 'padding:12px 24px;border-top:1px solid var(--border);background:var(--surface);text-align:center;';
-    footer.innerHTML = '<div style="font-size:10px;color:var(--text-dim)">Sources: ICIJ Offshore Leaks, OpenSanctions, GLEIF, SEC EDGAR, UK Companies House, CourtListener, Aleph, Wikidata, Land Registry</div>';
+    var version = (data.metadata && data.metadata.sift_version) || '';
+    var versionTag = version ? ' &middot; Sift v' + version : '';
+    footer.innerHTML = '<div style="font-size:10px;color:var(--text-dim)">Sources: ICIJ Offshore Leaks, OpenSanctions, GLEIF, SEC EDGAR, UK Companies House, CourtListener, Aleph, Wikidata, Land Registry' + versionTag + '</div>';
     root.appendChild(footer);
   })();
 } else {
@@ -2009,6 +2071,111 @@ node.filter(d => isAddress(d) && (degreeMap[d.id] || 0) >= 3)
   .attr('font-style', 'italic').attr('pointer-events', 'none');
 
 const tooltip = document.getElementById('tooltip');
+
+// Shared tooltip helpers for enrichment panels
+function showTip(evt, html) {
+  tooltip.innerHTML = html;
+  tooltip.classList.add('visible');
+  tooltip.style.left = Math.min(evt.clientX + 14, window.innerWidth - 360) + 'px';
+  tooltip.style.top = Math.max(0, evt.clientY - 14) + 'px';
+}
+function hideTip() { tooltip.classList.remove('visible'); }
+
+// Contextual tooltip content for enrichment data
+const SIFT_TOOLTIPS = {
+  insolvencyTypes: {
+    'compulsory-liquidation': 'Court-ordered winding up — a creditor or regulator petitioned to force closure. Indicates severe financial distress or suspected fraud.',
+    'creditors-voluntary-liquidation': 'Directors voluntarily placed the company into liquidation when unable to pay debts.',
+    'members-voluntary-liquidation': 'Solvent company wound up voluntarily by shareholders. Generally benign unless combined with other red flags.',
+    'administration': 'Company placed under administrator protection while a rescue plan is attempted. Suggests imminent insolvency.',
+    'administrative-receiver': 'Secured creditor appointed a receiver to recover debts.',
+    'receiver-manager': 'Receiver appointed to manage specific charged assets.',
+    'voluntary-arrangement': 'Company Voluntary Arrangement (CVA) — a deal with creditors to repay debts over time.',
+    'in-administration': 'Currently under administration protection order.',
+  },
+  cddaSections: {
+    'section-2': 'Persistent failure to file returns or accounts with Companies House.',
+    'section-3': 'Fraud in winding up.',
+    'section-4': 'Fraud or breach of duty while an officer of an insolvent company.',
+    'section-5': 'Summary conviction for not filing returns.',
+    'section-6': 'Unfitness — most common ground. Court found director unfit based on conduct.',
+    'section-7': 'Disqualification after investigation by the Insolvency Service.',
+    'section-8': 'Disqualification after Secretary of State investigation.',
+    'section-8a': 'Disqualification undertaking given in lieu of court order.',
+    'section-10': 'Participation in wrongful trading.',
+    'section-12c': 'Breach of competition law.',
+    'fraud-or-breach-of-duty': 'Fraud or breach of duty while officer of a company — CDDA 1986 s.4.',
+  },
+  amendmentTypes: {
+    '10-K/A': 'Amended annual report — the company corrected material information in its yearly filing. May indicate accounting errors, restatements, or SEC comment letters.',
+    '10-Q/A': 'Amended quarterly report — corrections to interim financial statements. Frequent amendments are a risk signal.',
+  },
+  eightKItems: {
+    '1.01': 'Entry into a Material Definitive Agreement — new contract, loan, or business arrangement.',
+    '1.02': 'Termination of a Material Definitive Agreement.',
+    '1.03': 'Bankruptcy or Receivership — the company has filed for bankruptcy protection.',
+    '2.01': 'Completion of Acquisition or Disposition of Assets — major purchase or sale completed.',
+    '2.02': 'Results of Operations and Financial Condition — earnings release.',
+    '2.03': 'Creation of a Direct Financial Obligation — new debt taken on.',
+    '2.04': 'Triggering Events That Accelerate or Increase a Direct Financial Obligation.',
+    '2.05': 'Costs Associated with Exit or Disposal Activities — restructuring charges.',
+    '2.06': 'Material Impairments — significant write-down of asset values.',
+    '3.01': 'Notice of Delisting or Failure to Satisfy a Listing Rule.',
+    '3.02': 'Unregistered Sales of Equity Securities.',
+    '3.03': 'Material Modification to Rights of Security Holders.',
+    '4.01': 'Changes in Certifying Accountant — auditor change, potential red flag.',
+    '4.02': 'Non-Reliance on Previously Issued Financial Statements — prior financials cannot be trusted.',
+    '5.01': 'Changes in Control of Registrant — ownership change.',
+    '5.02': 'Departure of Directors or Officers — leadership change or forced exit.',
+    '5.03': 'Amendments to Articles of Incorporation or Bylaws.',
+    '5.06': 'Change in Shell Company Status.',
+    '7.01': 'Regulation FD Disclosure — material non-public information made public.',
+    '8.01': 'Other Events deemed important by the registrant.',
+    '9.01': 'Financial Statements and Exhibits.',
+  },
+  bankruptcyChapters: {
+    '7': 'Chapter 7 — Liquidation. Assets sold to pay creditors, business ceases to exist.',
+    '11': 'Chapter 11 — Reorganization. Company continues operating under court supervision while restructuring debts.',
+    '13': 'Chapter 13 — Individual repayment plan. Debtor keeps assets but repays from future income.',
+    '15': 'Chapter 15 — Cross-border insolvency. Recognition of a foreign proceeding in the US.',
+  },
+  xbrlMetrics: {
+    'Revenues': 'Total revenue or net sales for the reporting period.',
+    'Assets': 'Total assets owned by the company.',
+    'Liabilities': 'Total obligations owed to creditors.',
+    'StockholdersEquity': 'Net assets — what shareholders would receive if all debts were paid.',
+    'NetIncomeLoss': 'Bottom-line profit or loss after all expenses and taxes.',
+    'CashAndCashEquivalentsAtCarryingValue': 'Liquid cash and short-term investments.',
+    'LongTermDebt': 'Debt obligations due beyond one year.',
+    'NumberOfSubsidiaries': 'Count of subsidiary entities.',
+  },
+  propertyTypes: {
+    'Detached': 'Standalone house not sharing walls with other buildings.',
+    'Semi-detached': 'House sharing one wall with an adjacent property.',
+    'Terraced': 'House in a row of identical houses sharing walls on both sides.',
+    'Flat/Maisonette': 'Apartment unit within a larger building.',
+  },
+  badges: {
+    'PEP': 'Politically Exposed Person — holds or has held a prominent public function. Subject to enhanced due diligence under AML regulations.',
+    'SANCTIONED': 'Subject to financial sanctions — asset freezes, travel bans, or trade restrictions imposed by a government or international body.',
+  },
+};
+
+// Wire tooltips onto elements with data-tip attributes after innerHTML is set
+function wireTips(container) {
+  container.querySelectorAll('[data-tip]').forEach(el => {
+    const tip = el.getAttribute('data-tip');
+    if (!tip) return;
+    el.classList.add('has-tooltip');
+    el.addEventListener('mouseover', evt => showTip(evt, tip));
+    el.addEventListener('mousemove', evt => {
+      tooltip.style.left = Math.min(evt.clientX + 14, window.innerWidth - 360) + 'px';
+      tooltip.style.top = Math.max(0, evt.clientY - 14) + 'px';
+    });
+    el.addEventListener('mouseout', hideTip);
+  });
+}
+
 node.on('mouseover', (event, d) => {
     let html = `<strong>${d.label}</strong>`;
     if (d.type) html += ` <span style="color:var(--text-dim)">(${d.type})</span>`;
@@ -4028,6 +4195,14 @@ const courtCases = enrichment.court_cases || null;
 const courtDetails = enrichment.court_details || null;
 const courtComplaints = enrichment.court_complaints || null;
 const temporalOverlaps = enrichment.temporal_overlaps || null;
+const ukInsolvency = enrichment.uk_insolvency || null;
+const ukDisqualified = enrichment.uk_disqualified_officers || null;
+const secAmendments = enrichment.sec_amendments || null;
+const secProxy = enrichment.sec_proxy || null;
+const sec8kEvents = enrichment.sec_8k_events || null;
+const courtBankruptcy = enrichment.court_bankruptcy || null;
+const landTransactions = enrichment.land_transactions || null;
+const alephDocuments = enrichment.aleph_documents || null;
 
 // ============================================================
 // ENRICHMENT: Financials Tab
@@ -4053,7 +4228,9 @@ const temporalOverlaps = enrichment.temporal_overlaps || null;
     secFinancials.forEach(m => {
       const val = m.value != null ? (typeof m.value === 'number' ? m.value.toLocaleString() : m.value) : '-';
       html += '<tr>';
-      html += '<td style="color:var(--text);font-weight:500">' + (m.metric || m.label || m.concept || '-') + '</td>';
+      const metricName = m.metric || m.label || m.concept || '-';
+      const metricTip = SIFT_TOOLTIPS.xbrlMetrics[metricName] || SIFT_TOOLTIPS.xbrlMetrics[m.concept] || '';
+      html += '<td style="color:var(--text);font-weight:500"' + (metricTip ? ' data-tip="' + metricTip.replace(/"/g, '&quot;') + '"' : '') + '>' + metricName + '</td>';
       html += '<td>' + (m.period || m.end || '-') + '</td>';
       html += '<td class="value-cell" style="color:var(--text)">' + val + '</td>';
       html += '<td>' + (m.form || '-') + '</td>';
@@ -4103,6 +4280,7 @@ const temporalOverlaps = enrichment.temporal_overlaps || null;
   }
 
   container.innerHTML = html;
+  wireTips(container);
 })();
 
 // ============================================================
@@ -4388,8 +4566,8 @@ const temporalOverlaps = enrichment.temporal_overlaps || null;
       const relation = (person.relation || person.type || '').replace(/_/g, ' ');
       const dates = person.dates || person.birth_date || '';
       let badges = '';
-      if (person.pep || person.is_pep) badges += '<span class="status-badge pep-badge">PEP</span>';
-      if (person.sanctioned || person.is_sanctioned) badges += '<span class="status-badge sanctioned-badge">SANCTIONED</span>';
+      if (person.pep || person.is_pep) badges += '<span class="status-badge pep-badge" data-tip="' + SIFT_TOOLTIPS.badges.PEP.replace(/"/g, '&quot;') + '">PEP</span>';
+      if (person.sanctioned || person.is_sanctioned) badges += '<span class="status-badge sanctioned-badge" data-tip="' + SIFT_TOOLTIPS.badges.SANCTIONED.replace(/"/g, '&quot;') + '">SANCTIONED</span>';
       html += '<li class="family-item">';
       html += '<span class="relation-label">' + relation + '</span>';
       html += '<span class="person-name">' + name + '</span>';
@@ -4442,6 +4620,7 @@ const temporalOverlaps = enrichment.temporal_overlaps || null;
   }
 
   container.innerHTML = html;
+  wireTips(container);
 })();
 
 // ============================================================
@@ -4531,6 +4710,274 @@ const temporalOverlaps = enrichment.temporal_overlaps || null;
   });
 
   container.innerHTML = html;
+  wireTips(container);
+})();
+
+// ============================================================
+// ENRICHMENT: Corporate Risk Tab
+// ============================================================
+(function buildCorporateRiskTab() {
+  const hasData = ukInsolvency || ukDisqualified || secAmendments;
+  if (!hasData) return;
+
+  const btn = document.querySelector('.tab-btn[data-tab="corporate-risk"]');
+  if (btn) btn.classList.add('has-data');
+
+  const container = document.getElementById('corporateRiskContent');
+  if (!container) return;
+  let html = '';
+
+  // Insolvency cases
+  if (ukInsolvency && (Array.isArray(ukInsolvency) ? ukInsolvency.length : ukInsolvency.cases)) {
+    const cases = Array.isArray(ukInsolvency) ? ukInsolvency : (ukInsolvency.cases || []);
+    html += '<div class="financials-section"><h4 style="color:var(--uk-color)">Insolvency Cases</h4>';
+    cases.forEach(c => {
+      html += '<div class="case-card" style="border-left-color:var(--uk-color)">';
+      const typeKey = (c.type || '').toLowerCase();
+      const insTip = SIFT_TOOLTIPS.insolvencyTypes[typeKey] || '';
+      html += '<div class="case-name"' + (insTip ? ' data-tip="' + insTip.replace(/"/g, '&quot;') + '"' : '') + '>' + (c.type || 'Insolvency').replace(/-/g, ' ') + '</div>';
+      html += '<div class="case-meta">';
+      (c.dates || []).forEach(d => {
+        if (d && d.date) html += '<strong>' + (d.type || 'Date').replace(/-/g, ' ') + ':</strong> ' + d.date + '<br>';
+      });
+      (c.practitioners || []).forEach(p => {
+        html += '<strong>Practitioner:</strong> ' + (p.name || '-') + ' (' + (p.role || '-') + ')<br>';
+      });
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+
+  // Disqualified directors
+  if (ukDisqualified && ukDisqualified.length) {
+    html += '<div class="financials-section"><h4 style="color:var(--sanction-color)">Disqualified Directors</h4>';
+    html += '<table class="financials-table"><thead><tr>';
+    html += '<th>Name</th><th>From</th><th>Until</th><th>Reason</th><th>Companies</th>';
+    html += '</tr></thead><tbody>';
+    ukDisqualified.forEach(d => {
+      const disqs = d.disqualifications || [d];
+      disqs.forEach(dq => {
+        html += '<tr>';
+        html += '<td style="color:var(--text);font-weight:500">' + (d.title || d.name || '-') + '</td>';
+        html += '<td>' + (dq.disqualified_from || '-') + '</td>';
+        html += '<td>' + (dq.disqualified_until || '-') + '</td>';
+        const reasonId = (dq.reason || {}).description_identifier || '';
+        const sectionMatch = ((dq.reason || {}).section || '').toString();
+        const cddaKey = sectionMatch ? 'section-' + sectionMatch : reasonId.toLowerCase();
+        const cddaTip = SIFT_TOOLTIPS.cddaSections[cddaKey] || SIFT_TOOLTIPS.cddaSections[reasonId] || '';
+        html += '<td' + (cddaTip ? ' data-tip="' + cddaTip.replace(/"/g, '&quot;') + '"' : '') + '>' + reasonId.replace(/-/g, ' ') + '</td>';
+        html += '<td>' + (dq.company_names || []).join(', ') + '</td>';
+        html += '</tr>';
+      });
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // Filing amendments
+  if (secAmendments && (Array.isArray(secAmendments) ? secAmendments.length : secAmendments.amendments)) {
+    const amends = Array.isArray(secAmendments) ? secAmendments : (secAmendments.amendments || []);
+    html += '<div class="financials-section"><h4 style="color:var(--sec-color)">Filing Amendments</h4>';
+    html += '<p style="font-size:12px;color:var(--pep-color);margin-bottom:8px">';
+    html += '⚠ ' + amends.length + ' amendment(s) found — may indicate corrections or SEC inquiries.</p>';
+    html += '<table class="financials-table"><thead><tr>';
+    html += '<th>Form</th><th>Filing Date</th><th>Accession</th>';
+    html += '</tr></thead><tbody>';
+    amends.forEach(a => {
+      html += '<tr>';
+      const amendTip = SIFT_TOOLTIPS.amendmentTypes[a.form] || '';
+      html += '<td style="color:var(--text);font-weight:500"' + (amendTip ? ' data-tip="' + amendTip.replace(/"/g, '&quot;') + '"' : '') + '>' + (a.form || '-') + '</td>';
+      html += '<td>' + (a.filing_date || '-') + '</td>';
+      html += '<td style="font-family:monospace;font-size:11px">' + (a.accession_number || '-') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  container.innerHTML = html;
+  wireTips(container);
+})();
+
+// ============================================================
+// ENRICHMENT: Material Events Tab
+// ============================================================
+(function buildEventsTab() {
+  const hasData = sec8kEvents || secProxy;
+  if (!hasData) return;
+
+  const btn = document.querySelector('.tab-btn[data-tab="events"]');
+  if (btn) btn.classList.add('has-data');
+
+  const container = document.getElementById('eventsContent');
+  if (!container) return;
+  let html = '';
+
+  // 8-K Events
+  if (sec8kEvents) {
+    const events = Array.isArray(sec8kEvents) ? sec8kEvents : (sec8kEvents.events || []);
+    if (events.length) {
+      html += '<div class="financials-section"><h4 style="color:var(--sec-color)">8-K Material Events</h4>';
+      events.forEach(ev => {
+        html += '<div class="case-card" style="border-left-color:var(--sec-color)">';
+        html += '<div class="case-meta"><strong>Filed:</strong> ' + (ev.filing_date || '-') + '</div>';
+        const items = ev.items || [];
+        items.forEach(item => {
+          html += '<div style="margin:6px 0">';
+          const itemTip = SIFT_TOOLTIPS.eightKItems[item.item] || '';
+          html += '<span style="font-weight:600;color:var(--sec-color)"' + (itemTip ? ' data-tip="' + itemTip.replace(/"/g, '&quot;') + '"' : '') + '>Item ' + (item.item || '') + '</span> ';
+          html += '<span style="color:var(--text);font-weight:500">' + (item.title || '') + '</span>';
+          if (item.summary) {
+            html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;max-width:800px">' + item.summary.substring(0, 300) + '</div>';
+          }
+          html += '</div>';
+        });
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+  }
+
+  // Proxy: Executive compensation
+  if (secProxy) {
+    const proxy = typeof secProxy === 'object' && !Array.isArray(secProxy) ? secProxy : {};
+    const execs = proxy.executives || [];
+    const board = proxy.board_members || [];
+
+    if (execs.length) {
+      html += '<div class="financials-section"><h4 style="color:var(--sec-color)">Executive Compensation (DEF 14A)</h4>';
+      if (proxy.filing_date) html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Filed: ' + proxy.filing_date + '</div>';
+      html += '<table class="financials-table"><thead><tr>';
+      html += '<th>Name</th><th>Title</th>';
+      html += '</tr></thead><tbody>';
+      execs.forEach(e => {
+        html += '<tr>';
+        html += '<td style="color:var(--text);font-weight:500">' + (e.name || '-') + '</td>';
+        html += '<td>' + (e.title || '-') + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+
+    if (board.length) {
+      html += '<div class="financials-section"><h4 style="color:var(--sec-color)">Board Members</h4>';
+      html += '<ul class="family-list">';
+      board.forEach(name => {
+        html += '<li class="family-item"><span class="person-name">' + name + '</span></li>';
+      });
+      html += '</ul></div>';
+    }
+  }
+
+  container.innerHTML = html;
+  wireTips(container);
+})();
+
+// ============================================================
+// ENRICHMENT: Property Tab
+// ============================================================
+(function buildPropertyTab() {
+  if (!landTransactions) return;
+
+  const txns = Array.isArray(landTransactions) ? landTransactions : (landTransactions.results || []);
+  if (!txns.length) return;
+
+  const btn = document.querySelector('.tab-btn[data-tab="property"]');
+  if (btn) btn.classList.add('has-data');
+
+  const container = document.getElementById('propertyContent');
+  if (!container) return;
+  let html = '';
+
+  html += '<div class="financials-section"><h4 style="color:var(--land-color)">Property Transactions</h4>';
+  html += '<table class="financials-table"><thead><tr>';
+  html += '<th>Date</th><th style="text-align:right">Price</th><th>Address</th><th>Type</th>';
+  html += '</tr></thead><tbody>';
+  txns.forEach(tx => {
+    const addr = tx.property_address || {};
+    const loc = [addr.paon, addr.street, addr.town, addr.postcode].filter(Boolean).join(', ');
+    const price = tx.price != null ? '£' + tx.price.toLocaleString() : '-';
+    html += '<tr>';
+    html += '<td>' + (tx.date || '-') + '</td>';
+    html += '<td class="value-cell" style="color:var(--text)">' + price + '</td>';
+    html += '<td style="color:var(--text)">' + loc + '</td>';
+    const ptTip = SIFT_TOOLTIPS.propertyTypes[tx.property_type] || '';
+    html += '<td' + (ptTip ? ' data-tip="' + ptTip.replace(/"/g, '&quot;') + '"' : '') + '>' + (tx.property_type || '-') + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  container.innerHTML = html;
+  wireTips(container);
+})();
+
+// ============================================================
+// ENRICHMENT: Documents Tab
+// ============================================================
+(function buildDocumentsTab() {
+  if (!alephDocuments) return;
+
+  const docs = Array.isArray(alephDocuments) ? alephDocuments : (alephDocuments.results || []);
+  if (!docs.length) return;
+
+  const btn = document.querySelector('.tab-btn[data-tab="documents"]');
+  if (btn) btn.classList.add('has-data');
+
+  const container = document.getElementById('documentsContent');
+  if (!container) return;
+  let html = '';
+
+  html += '<div class="financials-section"><h4 style="color:var(--aleph-color)">Aleph Documents</h4>';
+  html += '<table class="financials-table"><thead><tr>';
+  html += '<th>Document</th><th>Schema</th><th>Countries</th><th>Collection</th>';
+  html += '</tr></thead><tbody>';
+  docs.forEach(doc => {
+    const name = doc.name || doc.caption || doc.title || '-';
+    const countries = (doc.countries || []).join(', ') || '-';
+    const collection = doc.collection_id || doc.datasets ? (doc.datasets || []).join(', ') : '-';
+    html += '<tr>';
+    const docTip = doc.source_url ? 'Source: ' + doc.source_url : (doc.notes && doc.notes.length ? doc.notes[0] : '');
+    html += '<td style="color:var(--text);font-weight:500"' + (docTip ? ' data-tip="' + docTip.replace(/"/g, '&quot;') + '"' : '') + '>' + name + '</td>';
+    html += '<td>' + (doc.schema || '-') + '</td>';
+    html += '<td>' + countries + '</td>';
+    html += '<td>' + collection + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  container.innerHTML = html;
+  wireTips(container);
+})();
+
+// ============================================================
+// ENRICHMENT: Extend Litigation Tab with Bankruptcy
+// ============================================================
+(function addBankruptcyToLitigation() {
+  if (!courtBankruptcy) return;
+
+  const cases = Array.isArray(courtBankruptcy) ? courtBankruptcy : (courtBankruptcy.results || []);
+  if (!cases.length) return;
+
+  // Ensure litigation tab is visible
+  const btn = document.querySelector('.tab-btn[data-tab="litigation"]');
+  if (btn) btn.classList.add('has-data');
+
+  const container = document.getElementById('litigationContent');
+  if (!container) return;
+
+  let html = '<div class="financials-section" style="margin-top:24px"><h4 style="color:var(--court-color)">Bankruptcy Cases</h4>';
+  cases.forEach(c => {
+    const caseName = c.caseName || c.case_name || c.name || 'Unnamed';
+    const court = c.court || '';
+    const dateFiled = c.dateFiled || c.date_filed || '';
+    html += '<div class="case-card">';
+    html += '<div class="case-name">' + caseName + '</div>';
+    html += '<div class="case-meta">';
+    if (court) html += '<strong>Court:</strong> ' + court + '<br>';
+    if (dateFiled) html += '<strong>Filed:</strong> ' + dateFiled + '<br>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+
+  container.innerHTML += html;
 })();
 
 } // end of investigation mode else-block
