@@ -5,6 +5,8 @@ from __future__ import annotations
 import httpx
 from typing import Any
 
+from sift import __version__
+
 BASE_URL = "https://api.company-information.service.gov.uk"
 
 
@@ -19,7 +21,7 @@ class CompaniesHouseClient:
         kwargs: dict[str, Any] = {
             "base_url": BASE_URL,
             "timeout": timeout,
-            "headers": {"User-Agent": "sift/0.4.0"},
+            "headers": {"User-Agent": f"sift/{__version__}"},
         }
         if api_key:
             kwargs["auth"] = (api_key, "")
@@ -178,6 +180,47 @@ class CompaniesHouseClient:
                 for c in items
             ],
         }
+
+    async def search_disqualified(
+        self, query: str, items_per_page: int = 10,
+    ) -> dict[str, Any]:
+        """Search the disqualified directors register."""
+        resp = await self._client.get(
+            "/search/disqualified-officers",
+            params={"q": query, "items_per_page": items_per_page},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def get_disqualified_officer(self, officer_id: str) -> dict[str, Any]:
+        """Get disqualification details for a specific officer."""
+        resp = await self._client.get(
+            f"/disqualified-officers/natural/{officer_id}",
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def get_insolvency(self, company_number: str) -> dict[str, Any]:
+        """Get insolvency case history for a company."""
+        resp = await self._client.get(
+            f"/company/{company_number}/insolvency",
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def search_dissolved(
+        self, query: str, items_per_page: int = 10, start_index: int = 0,
+    ) -> dict[str, Any]:
+        """Search for dissolved companies."""
+        params: dict[str, Any] = {"q": query, "items_per_page": items_per_page}
+        if start_index:
+            params["start_index"] = start_index
+        resp = await self._client.get(
+            "/dissolved-search/companies",
+            params=params,
+        )
+        resp.raise_for_status()
+        return resp.json()
 
     async def get_confirmation_statements(
         self, company_number: str,

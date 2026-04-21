@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sift import __version__
+
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "investigations"
 
 
@@ -21,6 +23,7 @@ def export_json(
     """
     export = {
         "export_format": "sift-investigation-v1",
+        "sift_version": __version__,
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "query": investigation_data.get("query", ""),
         "stats": investigation_data.get("traversal_stats", {}),
@@ -64,7 +67,7 @@ def export_markdown(
     lines.append(f"# Investigation: {query}")
     lines.append(f"")
     lines.append(f"**Generated:** {now}  ")
-    lines.append(f"**Tool:** Sift — Cross-referencing public financial and corporate data")
+    lines.append(f"**Tool:** Sift v{__version__} — Cross-referencing public financial and corporate data")
     lines.append(f"**Sources:** ICIJ Offshore Leaks, OpenSanctions, GLEIF, SEC EDGAR, UK Companies House, CourtListener")
     lines.append(f"")
 

@@ -21,11 +21,11 @@ enrichment and PEP identification).
 | ICIJ Offshore Leaks | 810K+ entities from 5 leak investigations | None |
 | OpenSanctions | 320+ sanctions lists, PEP databases, enforcement records | API key |
 | GLEIF LEI Registry | Global corporate identifiers + ownership chains | None |
-| SEC EDGAR | US public company filings, 10-K/10-Q/8-K | User-Agent only |
-| UK Companies House | UK company records, officers, PSC (beneficial ownership) | Free API key |
-| CourtListener | US federal court records (PACER/RECAP) | Free token |
-| OCCRP Aleph | Investigative datasets, company records, leaked documents | Approved account required |
-| UK Land Registry | Property transaction prices and addresses (England/Wales) | None |
+| SEC EDGAR | US public company filings, 10-K/10-Q/8-K/DEF 14A, amendments | User-Agent only |
+| UK Companies House | UK company records, officers, PSC, insolvency, disqualifications | Free API key |
+| CourtListener | US federal court records, opinions, bankruptcy (PACER/RECAP) | Free token |
+| OCCRP Aleph | Investigative datasets, entity networks, leaked documents | Approved account required |
+| UK Land Registry | Property transactions, price history, high-value purchases | None |
 | Wikidata | Structured data on people, companies, political roles | None |
 
 ## Skill
@@ -241,6 +241,20 @@ what we're sending before assuming the service is down.
 4. **Watch for ID prefix collisions** — node IDs like `uk-09358941`
    (company) and `uk-psc-13214529-name` (person) both start with
    `uk-`. Be precise when parsing IDs to extract parameters.
+
+## Versioning
+
+Single source of truth: `sift/__init__.py` (`__version__`) and `pyproject.toml`
+(kept in sync). All API client User-Agent strings import `__version__`.
+
+- **patch** (0.5.1): bug fixes, minor corrections
+- **minor** (0.6.0): new features, scan improvements, new data sources
+- **major** (1.0.0): breaking changes to tool schemas or output format
+
+To bump: `python tools/bump_version.py <major|minor|patch>` — updates
+`pyproject.toml`, `sift/__init__.py`, and `CHANGELOG.md` in one step.
+
+Update `CHANGELOG.md` under `[Unreleased]` with every meaningful change.
 
 ## Conventions
 
