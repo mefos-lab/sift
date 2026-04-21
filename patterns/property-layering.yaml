@@ -1,0 +1,88 @@
+name: property_layering
+title: Property Layering
+description: >
+  High-value property purchases in rapid succession or through
+  multiple corporate entities. UK property is a documented money
+  laundering endpoint — Transparency International estimates that
+  £1.5 billion of UK property is owned by entities connected to
+  suspicious wealth. The NCA has identified luxury property as a
+  primary laundering mechanism for corrupt foreign officials and
+  organised crime groups.
+risk_level: HIGH
+status: PROPOSED
+sources:
+  - nca_sars_data
+  - transparency_international_uk_property
+  - uk_nra_2025
+references:
+  - title: "Transparency International — Faulty Towers: Understanding the Impact of Overseas Corruption on the London Property Market"
+    url: https://www.transparency.org.uk/publications/faulty-towers-understanding-the-impact-of-overseas-corruption-on-the-london-property-market
+  - title: "UK NCA — UK National Risk Assessment"
+    url: https://www.gov.uk/government/publications/national-risk-assessment-of-money-laundering-and-terrorist-financing-2025
+
+detection:
+  conditions:
+    - id: high_value_property
+      description: Property transaction exceeding £1M
+      type: property_value
+      min_value: 1000000
+
+    - id: rapid_purchases
+      description: Multiple property transactions within 12 months
+      type: temporal_cluster
+      window_days: 365
+      min_entities: 2
+
+    - id: multi_entity_ownership
+      description: Properties held through different corporate vehicles
+      type: officer_overlap
+      min_shared_officers: 1
+      optional: true
+
+    - id: secrecy_jurisdiction_owner
+      description: Owning entity registered in secrecy jurisdiction
+      type: jurisdiction_risk
+      optional: true
+
+  indicators:
+    - High-value purchases through corporate vehicles
+    - Multiple properties acquired in quick succession
+    - Owning entities in secrecy jurisdictions
+    - Cash purchases (no mortgage registered)
+    - Properties held briefly then resold at similar value
+
+  actionable_significance:
+    applies_to: UK
+    note: >
+      This pattern uses UK Land Registry data and applies to
+      property in England and Wales. The structural signal
+      (rapid high-value purchases through corporate vehicles)
+      is a money laundering indicator globally, but the legal
+      framework and enforcement mechanisms below are UK-specific.
+    violation: >
+      Money laundering through UK property is an offence under the
+      Proceeds of Crime Act 2002 (POCA). The UK's Economic Crime
+      (Transparency and Enforcement) Act 2022 created the Register
+      of Overseas Entities, requiring foreign companies owning UK
+      property to declare beneficial owners. Non-compliance is a
+      criminal offence. Unexplained wealth orders (UWOs) can be
+      used to force disclosure of how high-value property was funded.
+    enforcement_body: >
+      National Crime Agency (NCA — unexplained wealth orders and
+      account freezing orders), Companies House (Register of
+      Overseas Entities compliance), HMRC (tax evasion), SFO
+      (large-scale fraud/corruption proceeds).
+    next_steps:
+      - Check if the owning entity is on the Register of Overseas Entities (Companies House)
+      - Look for charge register entries (mortgages) — absence of charges on high-value property is a red flag
+      - Trace the corporate ownership chain through GLEIF and Companies House
+      - Check PSCs for the owning entity — are the beneficial owners disclosed?
+      - Cross-reference owners against sanctions lists and ICIJ data
+      - Consider whether a referral to the NCA is warranted (if connected to suspicious wealth)
+
+  scoring:
+    high: [high_value_property, rapid_purchases, secrecy_jurisdiction_owner]
+    medium: [high_value_property, rapid_purchases]
+    low: high_value_property
+
+  data_sources: [land_registry, companies_house, gleif]

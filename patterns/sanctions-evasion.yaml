@@ -44,6 +44,18 @@ detection:
       type: path_analysis
       min_intermediary_layers: 1
 
+    - id: material_event_near_sanctions
+      description: 8-K Item 1.03 (bankruptcy) or 5.01 (change of control) near sanctions date
+      type: sec_event_type
+      items: ["1.03", "5.01"]
+      optional: true
+
+    - id: property_near_sanctions
+      description: High-value property purchase suggesting asset shielding
+      type: property_value
+      min_value: 2000000
+      optional: true
+
   indicators:
     - Entity created after sanctions designation date
     - Banking in jurisdiction with weaker sanctions enforcement

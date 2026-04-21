@@ -1,0 +1,82 @@
+name: phoenix_company
+title: Phoenix Company
+description: >
+  Company dissolved or entered insolvency, with a new company formed
+  at the same address with a similar name and overlapping directors.
+  "Phoenixing" is a well-documented fraud typology where directors
+  wind up a company to escape debts and immediately start a new one,
+  transferring assets and customers while leaving creditors unpaid.
+  The UK Insolvency Service specifically targets this behaviour.
+risk_level: HIGH
+status: PROPOSED
+sources:
+  - uk_insolvency_service
+  - uk_nra_2025
+references:
+  - title: "UK Insolvency Service — Phoenix Companies"
+    url: https://www.gov.uk/government/publications/phoenix-companies-and-the-role-of-the-insolvency-service
+  - title: "UK National Risk Assessment of Money Laundering and Terrorist Financing"
+    url: https://www.gov.uk/government/publications/national-risk-assessment-of-money-laundering-and-terrorist-financing-2025
+
+detection:
+  conditions:
+    - id: insolvency_event
+      description: Entity has entered insolvency or been dissolved
+      type: insolvency_status
+
+    - id: rapid_formation
+      description: New entity formed within 180 days at same location
+      type: temporal_cluster
+      window_days: 180
+      min_entities: 2
+
+    - id: same_address
+      description: Multiple entities share the same registered address
+      type: address_clustering
+      min_entities_per_address: 2
+
+    - id: similar_name
+      description: New entity has a similar name to the dissolved one
+      type: name_match
+      similarity_threshold: 0.6
+      optional: true
+
+  indicators:
+    - Company dissolved followed by new formation at same address
+    - Overlapping directors between old and new company
+    - Asset transfer from old to new entity at undervalue
+    - Creditors of old company left unpaid
+    - Similar trading name or business activity
+
+  actionable_significance:
+    applies_to: UK
+    note: >
+      This pattern is specific to UK-registered companies. The
+      structural signal (dissolution followed by reformation at
+      the same address with overlapping directors) may indicate
+      risk in any jurisdiction, but the legal framework below
+      applies only to UK entities.
+    violation: >
+      Phoenix fraud is prosecutable under the Insolvency Act 1986
+      (s.216-217 — restriction on re-use of company names) and
+      Fraud Act 2006. Directors who transfer business to a new
+      company while leaving debts behind face personal liability
+      for the new company's debts and potential criminal charges.
+      HMRC is frequently the largest creditor left unpaid.
+    enforcement_body: >
+      UK Insolvency Service (primary investigator), HMRC (tax
+      debts), Companies House (filing irregularities), Serious
+      Fraud Office (if large-scale).
+    next_steps:
+      - Compare director lists between old and new companies
+      - Check if the old company had outstanding creditors (especially HMRC)
+      - Look for asset transfers between old and new company in Land Registry or filing history
+      - Check if the new company uses a similar trading name (s.216 CDDA violation)
+      - Report to the Insolvency Service with evidence of the formation-dissolution-reformation chain
+
+  scoring:
+    high: [insolvency_event, rapid_formation, same_address, similar_name]
+    medium: [insolvency_event, rapid_formation, same_address]
+    low: [insolvency_event, rapid_formation]
+
+  data_sources: [companies_house, land_registry]

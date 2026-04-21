@@ -56,6 +56,22 @@ detection:
       type: cycle_detection
       max_cycle_length: 5
 
+    - id: disqualified_officer
+      description: Disqualified director serving as officer
+      type: officer_disqualification
+      optional: true
+
+    - id: early_insolvency
+      description: Insolvency within 2 years of formation
+      type: insolvency_status
+      optional: true
+
+    - id: amendment_corrections
+      description: Multiple filing amendments suggesting corrections
+      type: amendment_count
+      min_count: 2
+      optional: true
+
   indicators:
     - Corporate director (company as director of company)
     - Bearer shares or bearer instruments

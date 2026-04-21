@@ -347,6 +347,26 @@ def _evaluate_condition(cond: dict, graph: _GraphIndex) -> list[str] | None:
         return _eval_name_obfuscation(cond, graph)
     elif ctype == "name_obfuscation_jurisdiction":
         return _eval_name_obfuscation_jurisdiction(cond, graph)
+    elif ctype == "insolvency_status":
+        return _eval_insolvency_status(cond, graph)
+    elif ctype == "officer_disqualification":
+        return _eval_officer_disqualification(cond, graph)
+    elif ctype == "sec_event_type":
+        return _eval_sec_event_type(cond, graph)
+    elif ctype == "amendment_count":
+        return _eval_amendment_count(cond, graph)
+    elif ctype == "property_value":
+        return _eval_property_value(cond, graph)
+    elif ctype == "bankruptcy_filing":
+        return _eval_bankruptcy_filing(cond, graph)
+    elif ctype == "temporal_range":
+        return _eval_temporal_range(cond, graph)
+    elif ctype == "jurisdiction_mismatch":
+        return _eval_jurisdiction_mismatch(cond, graph)
+    elif ctype == "entity_status":
+        return _eval_entity_status(cond, graph)
+    elif ctype == "temporal_sequence":
+        return _eval_temporal_sequence(cond, graph)
 
     return None
 
@@ -873,4 +893,194 @@ def _eval_name_obfuscation_jurisdiction(
                 f"{' / '.join(labels)}"
             )
 
+    return hits if hits else None
+
+
+# ------------------------------------------------------------------
+# New condition evaluators — corporate distress & enrichment signals
+# ------------------------------------------------------------------
+
+def _eval_insolvency_status(cond: dict, graph: _GraphIndex) -> list[str] | None:
+    """Check for nodes with insolvency flags or specific insolvency types."""
+    target_statuses = cond.get("statuses", [])
+    if isinstance(target_statuses, str):
+        target_statuses = [target_statuses]
+    target_set = {s.lower() for s in target_statuses} if target_statuses else None
+    hits = []
+    for n in graph.nodes.values():
+        if n.get("insolvency") or n.get("insolvency_status"):
+            status = (n.get("insolvency_status") or n.get("company_status") or "").lower()
+            ins_type = ""
+            cases = n.get("insolvency_cases", [])
+            if cases and isinstance(cases, list) and isinstance(cases[0], dict):
+                ins_type = cases[0].get("type", "").lower()
+            if target_set:
+                if status in target_set or ins_type in target_set:
+                    hits.append(f"{n.get('label', '?')[:30]} — {ins_type or status}")
+            else:
+                hits.append(f"{n.get('label', '?')[:30]} — insolvency detected")
+    return hits if hits else None
+
+
+def _eval_officer_disqualification(cond: dict, graph: _GraphIndex) -> list[str] | None:
+    """Check for nodes flagged as disqualified directors."""
+    hits = []
+    for n in graph.nodes.values():
+        if n.get("disqualified"):
+            hits.append(f"{n.get('label', '?')[:30]} — disqualified director")
+    return hits if hits else None
+
+
+def _eval_sec_event_type(cond: dict, graph: _GraphIndex) -> list[str] | None:
+    """Check for nodes with specific SEC 8-K item types."""
+    target_items = cond.get("items", [])
+    if isinstance(target_items, str):
+        target_items = [target_items]
+    target_set = set(target_items) if target_items else None
+    hits = []
+    for n in graph.nodes.values():
+        events = n.get("sec_8k_items") or n.get("material_events") or []
+        if not isinstance(events, list):
+            continue
+        for ev in events:
+            item_num = ev.get("item", "") if isinstance(ev, dict) else str(ev)
+            if target_set is None or item_num in target_set:
+                hits.append(f"{n.get('label', '?')[:30]} — 8-K Item {item_num}")
+    return hits if hits else None
+
+
+def _eval_amendment_count(cond: dict, graph: _GraphIndex) -> list[str] | None:
+    """Check for nodes with filing amendment counts exceeding a threshold."""
+    min_count = cond.get("min_count", 2)
+    hits = []
+    for n in graph.nodes.values():
+        count = n.get("amendment_count", 0)
+        if isinstance(count, (int, float)) and count >= min_count:
+            hits.append(f"{n.get('label', '?')[:30]} — {int(count)} amendments")
+    return hits if hits else None
+
+
+def _eval_property_value(cond: dict, graph: _GraphIndex) -> list[str] | None:
+    """Check for nodes with property values exceeding a threshold."""
+    min_value = cond.get("min_value", 1_000_000)
+    hits = []
+    for n in graph.nodes.values():
+        price = n.get("price") or n.get("property_price") or 0
+        if isinstance(price, (int, float)) and price >= min_value:
+            hits.append(f"{n.get('label', '?')[:30]} — £{int(price):,}")
+    return hits if hits else None
+
+
+def _eval_bankruptcy_filing(cond: dict, graph: _GraphIndex) -> list[str] | None:
+    """Check for nodes with bankruptcy status."""
+    hits = []
+    for n in graph.nodes.values():
+        if n.get("bankruptcy") or n.get("bankruptcy_status") or n.get("chapter"):
+            chapter = n.get("chapter", "")
+            hits.append(
+                f"{n.get('label', '?')[:30]} — bankruptcy"
+                + (f" (Chapter {chapter})" if chapter else "")
+            )
+    return hits if hits else None
+
+
+def _eval_temporal_range(cond: dict, graph: _GraphIndex) -> list[str] | None:
+    """Check if a date span between two fields is within max_days."""
+    from datetime import datetime
+    field_start = cond.get("field_start", "incorporation_date")
+    field_end = cond.get("field_end", "dissolution_date")
+    max_days = cond.get("max_days", 730)
+    hits = []
+    for n in graph.nodes.values():
+        start_str = n.get(field_start, "")
+        end_str = n.get(field_end, "")
+        if not start_str or not end_str:
+            continue
+        try:
+            start = datetime.fromisoformat(start_str[:10])
+            end = datetime.fromisoformat(end_str[:10])
+            delta = (end - start).days
+            if 0 < delta <= max_days:
+                hits.append(
+                    f"{n.get('label', '?')[:30]} — {delta} days "
+                    f"({start_str[:10]} to {end_str[:10]})"
+                )
+        except (ValueError, TypeError):
+            continue
+    return hits if hits else None
+
+
+def _eval_jurisdiction_mismatch(cond: dict, graph: _GraphIndex) -> list[str] | None:
+    """Check if entity officers are from different jurisdictions than the entity."""
+    entity_jur = cond.get("entity_jurisdiction", "").upper()
+    exclude_jur = cond.get("officer_jurisdictions_exclude", "").upper()
+    hits = []
+    for nid, n in graph.nodes.items():
+        ntype = (n.get("node_type") or n.get("type") or "").lower()
+        if ntype not in ("entity", "company"):
+            continue
+        jur = (n.get("jurisdiction") or "").upper()
+        if entity_jur and jur != entity_jur:
+            continue
+        for edge in graph.out_edges.get(nid, []) + graph.in_edges.get(nid, []):
+            other_id = edge["target_id"] if edge["source_id"] == nid else edge["source_id"]
+            other = graph.nodes.get(other_id, {})
+            other_type = (other.get("node_type") or other.get("type") or "").lower()
+            if other_type not in ("officer", "person"):
+                continue
+            other_nat = (other.get("nationality") or "").upper()
+            other_codes = [c.upper() for c in other.get("country_codes", [])]
+            if exclude_jur:
+                if (other_nat and other_nat != exclude_jur) or \
+                   (other_codes and exclude_jur not in other_codes):
+                    hits.append(
+                        f"{other.get('label', '?')[:25]} "
+                        f"directs {n.get('label', '?')[:25]} ({jur})"
+                    )
+    return hits if hits else None
+
+
+def _eval_entity_status(cond: dict, graph: _GraphIndex) -> list[str] | None:
+    """Check if any entity has a status matching the provided list."""
+    target_statuses = cond.get("statuses", [])
+    if isinstance(target_statuses, str):
+        target_statuses = [target_statuses]
+    target_set = {s.lower() for s in target_statuses}
+    hits = []
+    for n in graph.nodes.values():
+        status = (n.get("status") or n.get("company_status") or "").lower()
+        if status in target_set:
+            hits.append(f"{n.get('label', '?')[:30]} — status: {status}")
+    return hits if hits else None
+
+
+def _eval_temporal_sequence(cond: dict, graph: _GraphIndex) -> list[str] | None:
+    """Check if one date field occurs after another reference date field."""
+    from datetime import datetime
+    entity_field = cond.get("entity_date", "incorporation_date")
+    ref_field = cond.get("reference_date", "sanctions_designation_date")
+    entity_after = cond.get("entity_after_reference", True)
+    hits = []
+    for n in graph.nodes.values():
+        entity_date_str = n.get(entity_field, "")
+        ref_date_str = n.get(ref_field, "")
+        if not entity_date_str or not ref_date_str:
+            continue
+        try:
+            entity_date = datetime.fromisoformat(entity_date_str[:10])
+            ref_date = datetime.fromisoformat(ref_date_str[:10])
+            if entity_after and entity_date > ref_date:
+                hits.append(
+                    f"{n.get('label', '?')[:30]} — {entity_field} "
+                    f"({entity_date_str[:10]}) after {ref_field} "
+                    f"({ref_date_str[:10]})"
+                )
+            elif not entity_after and entity_date < ref_date:
+                hits.append(
+                    f"{n.get('label', '?')[:30]} — {entity_field} "
+                    f"({entity_date_str[:10]}) before {ref_field} "
+                    f"({ref_date_str[:10]})"
+                )
+        except (ValueError, TypeError):
+            continue
     return hits if hits else None

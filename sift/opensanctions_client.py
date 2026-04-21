@@ -5,6 +5,8 @@ from __future__ import annotations
 import httpx
 from typing import Any
 
+from sift import __version__
+
 BASE_URL = "https://api.opensanctions.org"
 
 
@@ -12,7 +14,7 @@ class OpenSanctionsClient:
     """Async client for the OpenSanctions API."""
 
     def __init__(self, api_key: str | None = None, timeout: float = 30.0):
-        headers = {"User-Agent": "sift/0.4.0"}
+        headers = {"User-Agent": f"sift/{__version__}"}
         if api_key:
             headers["Authorization"] = f"ApiKey {api_key}"
         self._client = httpx.AsyncClient(
@@ -38,6 +40,7 @@ class OpenSanctionsClient:
         offset: int = 0,
         fuzzy: bool = True,
         changed_since: str | None = None,
+        sort: str | None = None,
     ) -> dict[str, Any]:
         """Full-text search with faceted filtering."""
         params: dict[str, Any] = {
@@ -56,6 +59,8 @@ class OpenSanctionsClient:
             params["datasets"] = datasets
         if changed_since:
             params["changed_since"] = changed_since
+        if sort:
+            params["sort"] = sort
 
         resp = await self._client.get(f"/search/{dataset}", params=params)
         resp.raise_for_status()

@@ -7,4 +7,5 @@ build/
 .venv/
 .env
 .claude/settings.local.json
+.sift/
 investigations/

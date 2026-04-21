@@ -244,7 +244,7 @@ class TestTraverse:
                          "jurisdiction": "GB", "country": "GB",
                          "status": "ACTIVE", "initial_registration": "2020-01-01"}],
         }
-        gleif.get_ownership.return_value = None
+        gleif.get_all_relationships.return_value = None
 
         result = await traverse(
             icij, os, ["Test Corp"], max_depth=1, budget=50,

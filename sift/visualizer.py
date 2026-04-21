@@ -21,6 +21,8 @@ import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
+from sift import __version__
+
 TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "visualizations" / "investigation-viz.html"
 D3_PATH = Path(__file__).resolve().parent.parent / "visualizations" / "d3.v7.min.js"
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "investigations"
@@ -74,6 +76,7 @@ def generate_visualization(
                 "generated_at": datetime.now(timezone.utc).strftime(
                     "%Y-%m-%d %H:%M UTC"
                 ),
+                "sift_version": __version__,
             },
             "nodes": nodes,
             "edges": edges,
@@ -296,6 +299,7 @@ def _build_scan_json(data: dict) -> str:
                     or datetime.now(timezone.utc).strftime(
                         "%Y-%m-%d %H:%M UTC"
                     ),
+                "sift_version": __version__,
             },
             "budget": data.get("budget", {}),
             "findings": findings,
@@ -460,6 +464,61 @@ def _extract_timeline_events(data: dict, nodes: list[dict]) -> list[dict]:
                 _add(terminated, name[:60], "courtlistener",
                      "Case Terminated", "")
 
+    # --- UK insolvency dates ---
+    for case in data.get("uk_insolvency", []):
+        if isinstance(case, dict):
+            for d in case.get("dates", []):
+                if isinstance(d, dict) and d.get("date"):
+                    _add(d["date"], case.get("type", "Insolvency"),
+                         "companies_house", "Insolvency Event",
+                         d.get("type", ""))
+            for p in case.get("practitioners", []):
+                if isinstance(p, dict) and p.get("appointed_on"):
+                    _add(p["appointed_on"], p.get("name", ""),
+                         "companies_house", "Practitioner Appointed",
+                         p.get("role", ""))
+
+    # --- SEC 8-K material events ---
+    for event in data.get("sec_8k_events", []):
+        if isinstance(event, dict):
+            fd = event.get("filing_date", "")
+            if fd:
+                items = event.get("items", [])
+                desc = "; ".join(
+                    i.get("title", i.get("item", ""))
+                    for i in items[:3]
+                ) if items else "8-K Event"
+                _add(fd, desc[:80], "sec", "Material Event", desc[:200])
+
+    # --- SEC amendment filings ---
+    for amend in data.get("sec_amendments", []):
+        if isinstance(amend, dict):
+            fd = amend.get("filing_date", "")
+            if fd:
+                _add(fd, amend.get("form", "Amendment"), "sec",
+                     "Filing Amendment", f"Form {amend.get('form', '')}")
+
+    # --- Property transactions ---
+    for tx in data.get("land_transactions", []):
+        if isinstance(tx, dict):
+            fd = tx.get("date", "")
+            if fd:
+                price = tx.get("price")
+                addr = tx.get("property_address", {})
+                loc = f"{addr.get('street', '')} {addr.get('town', '')}".strip()
+                price_str = f"£{price:,}" if price else ""
+                _add(fd, loc or "Property", "land_registry",
+                     "Property Transaction", f"{price_str} {loc}".strip())
+
+    # --- Bankruptcy cases ---
+    for case in data.get("court_bankruptcy", []):
+        if isinstance(case, dict):
+            fd = case.get("dateFiled", case.get("date_filed", ""))
+            name = case.get("caseName", case.get("case_name", ""))
+            if fd:
+                _add(fd, name[:60], "courtlistener",
+                     "Bankruptcy Filed", "")
+
     # Sort by date
     events.sort(key=lambda e: e["date"])
     return events
@@ -468,9 +527,14 @@ def _extract_timeline_events(data: dict, nodes: list[dict]) -> list[dict]:
 # Enrichment data keys that the viewer can display
 _ENRICHMENT_KEYS = (
     "sec_financials",
+    "sec_proxy",
+    "sec_8k_events",
+    "sec_amendments",
     "uk_accounts",
     "uk_charges",
     "uk_filing_history",
+    "uk_insolvency",
+    "uk_disqualified_officers",
     "sec_filings",
     "wikidata_family",
     "wikidata_career",
@@ -478,7 +542,11 @@ _ENRICHMENT_KEYS = (
     "court_cases",
     "court_details",
     "court_complaints",
+    "court_opinions",
+    "court_bankruptcy",
     "temporal_overlaps",
+    "land_transactions",
+    "aleph_documents",
 )
 
 

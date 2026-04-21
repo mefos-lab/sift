@@ -5,6 +5,8 @@ from __future__ import annotations
 import httpx
 from typing import Any
 
+from sift import __version__
+
 BASE_URL = "https://offshoreleaks.icij.org/api/v1"
 
 INVESTIGATIONS = [
@@ -25,7 +27,7 @@ class ICIJClient:
         self._client = httpx.AsyncClient(
             base_url=BASE_URL,
             timeout=timeout,
-            headers={"User-Agent": "sift/0.4.0"},
+            headers={"User-Agent": f"sift/{__version__}"},
         )
 
     async def close(self):

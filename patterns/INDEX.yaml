@@ -1,6 +1,6 @@
 # Sift Pattern Library — Machine-Readable Detection Rules
 #
-# 18 patterns derived from:
+# 24 patterns derived from:
 # - FATF Money Laundering Typologies (2018, 2020, 2023)
 # - FATF-Egmont Concealment of Beneficial Ownership (2018)
 # - Moody's Seven Indicators of Shell Company Risk
@@ -144,3 +144,35 @@ patterns:
     risk: HIGH
     status: CONFIRMED
     summary: Near-identical name variants across entities/jurisdictions (deliberate obfuscation)
+
+  # === Corporate Distress & Enrichment Patterns ===
+
+  - file: director-disqualification-network.yaml
+    name: director_disqualification_network
+    risk: HIGH
+    status: PROPOSED
+    summary: Multiple companies sharing a disqualified director
+
+  - file: phoenix-company.yaml
+    name: phoenix_company
+    risk: HIGH
+    status: PROPOSED
+    summary: Dissolved/insolvent company reborn at same address with similar name
+
+  - file: insider-self-dealing.yaml
+    name: insider_self_dealing
+    risk: MEDIUM
+    status: PROPOSED
+    summary: Executive compensation overlap with related party transactions
+
+  - file: property-layering.yaml
+    name: property_layering
+    risk: HIGH
+    status: PROPOSED
+    summary: High-value property purchases in rapid succession through multiple entities
+
+  - file: bankruptcy-abuse.yaml
+    name: bankruptcy_abuse
+    risk: MEDIUM
+    status: PROPOSED
+    summary: Serial bankruptcy filings across related entities with shared officers

@@ -662,3 +662,322 @@ class TestWikidataClient:
         req = transport.requests[0]
         assert "Authorization" not in req.headers
         await c.close()
+
+
+# =============================================================================
+# Aleph Client — new tools tests
+# =============================================================================
+
+class TestAlephExpand:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/entities/abc123/expand": {
+                "json": {
+                    "total": 2,
+                    "results": [
+                        {
+                            "id": "rel001",
+                            "schema": "Ownership",
+                            "properties": {
+                                "name": ["Ownership of Test Corp"],
+                                "owner": [{"id": "person001", "caption": "John Owner"}],
+                                "asset": [{"id": "abc123", "caption": "Test Corp"}],
+                            },
+                            "countries": [],
+                        },
+                        {
+                            "id": "rel002",
+                            "schema": "Directorship",
+                            "properties": {
+                                "name": ["Director of Test Corp"],
+                                "director": [{"id": "person002", "caption": "Jane Director"}],
+                                "organization": [{"id": "abc123", "caption": "Test Corp"}],
+                            },
+                            "countries": [],
+                        },
+                    ],
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = AlephClient()
+        c._client = httpx.AsyncClient(
+            base_url="https://aleph.occrp.org/api/2",
+            transport=transport,
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_expand_entity(self, client):
+        result = await client.expand_entity("abc123")
+        assert result["total"] == 2
+        assert len(result["results"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_expand_entity_with_limit(self, client):
+        result = await client.expand_entity("abc123", limit=1)
+        assert "results" in result
+
+
+class TestAlephDocuments:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/entities": {
+                "json": {
+                    "total": 1,
+                    "results": [
+                        {
+                            "id": "doc001",
+                            "schema": "Document",
+                            "properties": {
+                                "name": ["Leaked Contract.pdf"],
+                                "fileName": ["contract.pdf"],
+                            },
+                            "countries": ["pa"],
+                            "collection_id": 42,
+                        },
+                    ],
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = AlephClient()
+        c._client = httpx.AsyncClient(
+            base_url="https://aleph.occrp.org/api/2",
+            transport=transport,
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_search_collection_documents(self, client):
+        result = await client.search_collection_documents(42, query="contract")
+        assert result["total"] == 1
+        assert result["results"][0]["name"] == "Leaked Contract.pdf"
+
+    @pytest.mark.asyncio
+    async def test_search_collection_documents_no_query(self, client):
+        result = await client.search_collection_documents(42)
+        assert "results" in result
+
+
+class TestAlephRelationships:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/entities/abc123/expand": {
+                "json": {
+                    "total": 3,
+                    "results": [
+                        {
+                            "id": "rel001",
+                            "schema": "Ownership",
+                            "properties": {"name": ["Ownership"]},
+                            "countries": [],
+                        },
+                        {
+                            "id": "rel002",
+                            "schema": "Directorship",
+                            "properties": {"name": ["Directorship"]},
+                            "countries": [],
+                        },
+                        {
+                            "id": "rel003",
+                            "schema": "Payment",
+                            "properties": {"name": ["Payment"]},
+                            "countries": [],
+                        },
+                    ],
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = AlephClient()
+        c._client = httpx.AsyncClient(
+            base_url="https://aleph.occrp.org/api/2",
+            transport=transport,
+        )
+        return c
+
+    @pytest.mark.asyncio
+    async def test_get_entity_relationships(self, client):
+        result = await client.get_entity_relationships("abc123")
+        assert result["entity_id"] == "abc123"
+        assert len(result["relationships"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_get_entity_relationships_filtered(self, client):
+        result = await client.get_entity_relationships(
+            "abc123", schemata=["Ownership", "Directorship"],
+        )
+        assert result["entity_id"] == "abc123"
+        assert len(result["relationships"]) == 2
+        schemas = {r["schema"] for r in result["relationships"]}
+        assert schemas == {"Ownership", "Directorship"}
+
+
+# =============================================================================
+# Land Registry — new tools tests
+# =============================================================================
+
+class TestLandRegistryAddressHistory:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/app/root/qonsole/query": {
+                "json": {
+                    "results": {
+                        "bindings": [
+                            {
+                                "transaction": {"value": "http://example.com/tx/1"},
+                                "amount": {"value": "250000"},
+                                "date": {"value": "2010-03-15"},
+                                "paon": {"value": "10"},
+                                "street": {"value": "DOWNING STREET"},
+                                "town": {"value": "LONDON"},
+                                "postcode": {"value": "SW1A 2AA"},
+                                "type": {"value": "terraced"},
+                            },
+                            {
+                                "transaction": {"value": "http://example.com/tx/2"},
+                                "amount": {"value": "500000"},
+                                "date": {"value": "2020-06-01"},
+                                "paon": {"value": "10"},
+                                "street": {"value": "DOWNING STREET"},
+                                "town": {"value": "LONDON"},
+                                "postcode": {"value": "SW1A 2AA"},
+                                "type": {"value": "terraced"},
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = LandRegistryClient()
+        c._client = httpx.AsyncClient(transport=transport)
+        return c
+
+    @pytest.mark.asyncio
+    async def test_search_address_history(self, client):
+        result = await client.search_address_history(
+            paon="10", street="DOWNING STREET", town="LONDON",
+        )
+        assert result["total"] == 2
+        # Should be ordered by date ascending (oldest first)
+        assert result["results"][0]["date"] <= result["results"][1]["date"]
+
+    @pytest.mark.asyncio
+    async def test_search_address_history_with_postcode(self, client):
+        result = await client.search_address_history(
+            paon="10", street="DOWNING STREET", town="LONDON",
+            postcode="SW1A 2AA",
+        )
+        assert "results" in result
+
+
+class TestLandRegistryAreaStats:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/app/root/qonsole/query": {
+                "json": {
+                    "results": {
+                        "bindings": [
+                            {
+                                "year": {"value": "2023"},
+                                "avg_price": {"value": "450000.0"},
+                                "min_price": {"value": "200000"},
+                                "max_price": {"value": "900000"},
+                                "count": {"value": "150"},
+                            },
+                            {
+                                "year": {"value": "2024"},
+                                "avg_price": {"value": "475000.0"},
+                                "min_price": {"value": "210000"},
+                                "max_price": {"value": "950000"},
+                                "count": {"value": "130"},
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = LandRegistryClient()
+        c._client = httpx.AsyncClient(transport=transport)
+        return c
+
+    @pytest.mark.asyncio
+    async def test_get_area_stats(self, client):
+        result = await client.get_area_stats("LONDON")
+        assert result["town"] == "LONDON"
+        assert len(result["stats"]) == 2
+        assert result["stats"][0]["year"] == "2023"
+        assert result["stats"][0]["avg_price"] == 450000.0
+
+    @pytest.mark.asyncio
+    async def test_get_area_stats_with_year_range(self, client):
+        result = await client.get_area_stats(
+            "LONDON", year_from=2023, year_to=2024,
+        )
+        assert "stats" in result
+
+
+class TestLandRegistryHighValue:
+    @pytest.fixture
+    def mock_routes(self):
+        return {
+            "/app/root/qonsole/query": {
+                "json": {
+                    "results": {
+                        "bindings": [
+                            {
+                                "transaction": {"value": "http://example.com/tx/hv1"},
+                                "amount": {"value": "5000000"},
+                                "date": {"value": "2024-01-15"},
+                                "paon": {"value": "1"},
+                                "street": {"value": "PARK LANE"},
+                                "town": {"value": "LONDON"},
+                                "postcode": {"value": "W1K 1AA"},
+                                "type": {"value": "detached"},
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+
+    @pytest.fixture
+    def client(self, mock_routes):
+        transport = MockTransport(mock_routes)
+        c = LandRegistryClient()
+        c._client = httpx.AsyncClient(transport=transport)
+        return c
+
+    @pytest.mark.asyncio
+    async def test_search_high_value(self, client):
+        result = await client.search_high_value("LONDON")
+        assert result["total"] == 1
+        assert result["results"][0]["price"] == 5000000
+
+    @pytest.mark.asyncio
+    async def test_search_high_value_custom_threshold(self, client):
+        result = await client.search_high_value("LONDON", min_price=2000000)
+        assert "results" in result

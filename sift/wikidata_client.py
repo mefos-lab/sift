@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 import httpx
 from typing import Any
 
+from sift import __version__
+
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 
@@ -26,7 +28,7 @@ class WikidataClient:
         self._client = httpx.AsyncClient(
             timeout=timeout,
             headers={
-                "User-Agent": "sift/0.4.0",
+                "User-Agent": f"sift/{__version__}",
                 "Accept": "application/json",
             },
         )
