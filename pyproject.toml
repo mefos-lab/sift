@@ -10,13 +10,12 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
 dependencies = [
-    # Pinned below 2.0: mcp 2.0 removed the @server.list_tools() /
-    # @server.call_tool() decorator API this server is built on (and
-    # removed mcp.server.fastmcp). This spec was previously unpinned,
-    # which meant any fresh install would resolve to 2.0 and sift/server.py
-    # would stop importing entirely — with no test importing the server,
-    # the suite would still pass green. See tests/test_server.py.
-    "mcp>=1.0.0,<2",
+    # mcp 2.x. The 1.x -> 2.x break (removal of the @server.list_tools() /
+    # @server.call_tool() decorator API) is absorbed by sift/mcp_compat.py,
+    # which keeps this server's hand-authored tool schemas rather than letting
+    # 2.0 derive them from function signatures. Floor is 2.0 because that shim
+    # targets the tool-manager API.
+    "mcp>=2,<3",
     "httpx>=0.27.0",
     "pyyaml>=6.0",
 ]

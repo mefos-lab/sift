@@ -120,8 +120,33 @@ Add to `.mcp.json` in the project root (already present):
 Requires a Python venv with dependencies installed:
 ```
 python3 -m venv .venv
-.venv/bin/pip install mcp httpx
+.venv/bin/pip install -e .
 ```
+
+### mcp 2.x and the schema shim
+
+mcp 2.0 replaced the `@server.list_tools()` / `@server.call_tool()`
+decorator API this server was built on with a tool manager that
+**derives** each tool's schema from a Python function signature.
+
+Rewriting every tool as a typed function would silently lose what the
+hand-authored schemas carry — entity-type and investigation enums,
+OpenSanctions topic lists, per-field descriptions, required/optional
+distinctions. A degraded schema still registers; the model just calls
+the tool slightly wrong. So `sift/mcp_compat.py` keeps those schemas
+verbatim and adapts them to the 2.0 manager instead.
+
+Tool definitions in `server.py`'s `list_tools()` use a **local** `Tool`
+dataclass, deliberately not the SDK's type: they are the source of truth
+for what is advertised, so the next SDK break lands in the shim rather
+than in every tool definition.
+
+The shim writes a private attribute of the SDK's tool manager, because
+2.0 exposes no public way to register a pre-built schema. That seam is
+guarded by `tests/test_server.py::test_registered_schemas_match_definitions`,
+which asserts every advertised schema is byte-identical to its
+definition — so an SDK change fails loudly instead of quietly degrading
+what the model sees.
 
 ## Configuration
 

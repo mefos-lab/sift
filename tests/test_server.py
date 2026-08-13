@@ -13,8 +13,14 @@ the identical unpinned spec and the identical missing coverage, and
 was only still working because its virtualenv happened to hold an
 older mcp.
 
-`mcp` is now pinned `<2` in pyproject.toml. These tests are the part
-that makes a regression loud instead of silent.
+This server now runs on mcp 2.x via `sift/mcp_compat.py`, which keeps
+the hand-authored tool schemas instead of letting 2.0 derive them from
+function signatures. That shim writes a private attribute of the SDK's
+tool manager, because 2.0 offers no public way to register a pre-built
+schema. `test_registered_schemas_match_definitions` is what makes that
+seam safe: if a future SDK release breaks it, the schemas stop matching
+and this fails loudly, rather than the server quietly advertising
+degraded schemas the model then calls wrong.
 """
 
 import pytest
@@ -52,6 +58,39 @@ async def test_every_source_family_is_represented():
         "aleph_", "land_", "wikidata_",
     ):
         assert any(n.startswith(prefix) for n in names), f"no {prefix}* tools registered"
+
+
+@pytest.mark.asyncio
+async def test_registered_schemas_match_definitions():
+    """Every schema the SDK advertises must equal the one we authored.
+
+    This is the guard on the mcp_compat shim. A derived-schema regression
+    is silent — the tool still registers, it just loses enums, field
+    descriptions or required/optional distinctions — so compare exactly.
+    """
+    definitions = await server_module.list_tools()
+    await server_module._register()
+    advertised = {t.name: t for t in await server_module.server.list_tools()}
+
+    assert len(advertised) == len(definitions)
+    for d in definitions:
+        a = advertised.get(d.name)
+        assert a is not None, f"{d.name} was not registered"
+        assert a.input_schema == d.inputSchema, f"{d.name} schema drifted from its definition"
+        assert a.description == d.description, f"{d.name} description drifted"
+
+
+@pytest.mark.asyncio
+async def test_enums_survive_registration():
+    """Spot-check the detail most easily lost by signature-derived schemas."""
+    await server_module._register()
+    advertised = {t.name: t for t in await server_module.server.list_tools()}
+    icij = advertised["icij_search"].input_schema["properties"]
+    assert icij["entity_type"]["enum"], "icij_search entity_type enum lost"
+    assert icij["investigation"]["enum"], "icij_search investigation enum lost"
+    sanctions = advertised["sanctions_search"].input_schema["properties"]
+    assert sanctions["schema"]["enum"] == ["Person", "Company", "Organization", "LegalEntity"]
+    assert sanctions["topics"]["items"]["enum"], "sanctions_search topics enum lost"
 
 
 @pytest.mark.asyncio
