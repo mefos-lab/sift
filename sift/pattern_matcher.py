@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import onoma
 import yaml
 
 PATTERNS_DIR = Path(__file__).resolve().parent.parent / "patterns"
@@ -755,41 +756,32 @@ def _eval_name_match(cond: dict, graph: _GraphIndex) -> list[str] | None:
 
 
 def _norm(name: str) -> str:
-    return re.sub(r"[^a-z0-9 ]", "", name.lower()).strip()
-
-
-def _strip_accents(s: str) -> str:
-    import unicodedata
-    nfkd = unicodedata.normalize("NFKD", s)
-    return "".join(c for c in nfkd if not unicodedata.combining(c))
+    """Fold a name for comparison. Delegated to onoma."""
+    return onoma.fold(name)
 
 
 def _edit_distance(a: str, b: str) -> int:
-    """Levenshtein edit distance."""
-    if len(a) < len(b):
-        a, b = b, a
-    if not b:
-        return len(a)
-    prev = list(range(len(b) + 1))
-    for i, ca in enumerate(a):
-        curr = [i + 1]
-        for j, cb in enumerate(b):
-            curr.append(min(
-                prev[j + 1] + 1,
-                curr[j] + 1,
-                prev[j] + (0 if ca == cb else 1),
-            ))
-        prev = curr
-    return prev[-1]
+    """Levenshtein distance between two already-folded names.
+
+    Delegated to onoma, which uses a compiled implementation. Kept as a
+    distance rather than a boolean because the patterns below are
+    *detectors*: a small distance between two names is the signal, not
+    a reason to merge them. Deliberately confusable names are the thing
+    being looked for.
+    """
+    return onoma.edit_distance(a, b, folded=False)
 
 
 def _clean_person_name(name: str) -> str:
-    """Normalize a person name for fuzzy comparison: strip accents,
-    lowercase, remove titles, remove non-alpha, sort words."""
-    cleaned = _strip_accents(name).lower()
-    cleaned = re.sub(r"\b(mr|mrs|ms|miss|dr|prof|sir|dame|lord|lady)\b", "", cleaned)
-    cleaned = re.sub(r"[^a-z ]", "", cleaned).strip()
-    return " ".join(sorted(cleaned.split()))
+    """Normalize a person name for fuzzy comparison.
+
+    Strips titles and diacritics via onoma, then sorts the words so
+    that a name recorded surname-first compares equal to the same name
+    recorded given-name-first — sources disagree on ordering, and this
+    comparison is about the set of name parts rather than their
+    sequence.
+    """
+    return " ".join(sorted(onoma.strip_titles(name).split()))
 
 
 def _eval_name_obfuscation(cond: dict, graph: _GraphIndex) -> list[str] | None:
