@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+
+import onoma
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
@@ -209,20 +211,21 @@ def _looks_like_address(label: str) -> bool:
 
 
 def _normalize_name(name: str) -> str:
-    """Normalize a name for deduplication matching."""
-    # Remove common suffixes/prefixes
-    n = name.upper().strip()
-    # Remove punctuation variations
-    n = re.sub(r"[.,;:'\"\-()']", " ", n)
-    # Normalize whitespace
-    n = re.sub(r"\s+", " ", n).strip()
-    # Remove common corporate suffixes for comparison
-    for suffix in [" LTD", " LIMITED", " INC", " INC.", " CORP",
-                   " CORP.", " S.A.", " SA", " AG", " GMBH",
-                   " LLC", " LLP", " PLC"]:
-        if n.endswith(suffix):
-            n = n[:-len(suffix)].strip()
-    return n
+    """Canonical key for grouping duplicate entity nodes.
+
+    Delegated to onoma, which strips legal entity types via cleanco.
+    That covers far more jurisdictions than the hand-maintained suffix
+    list this replaced — which knew LTD/INC/CORP/SA/AG/GMBH/LLC/LLP/PLC
+    and so missed Nordic (AS, AB, Oy), Dutch (BV), Australian (Pty) and
+    others. This source set is international by nature, so that gap
+    mattered: the same company filed under two jurisdictions' suffixes
+    would not group.
+
+    Note this only widens grouping for corporate forms. Merging is
+    still keyed on (name, type, source), so a wider key does not merge
+    across sources or node types.
+    """
+    return onoma.strip_entity_types(name)
 
 
 def _normalize_address(addr: str) -> str:
