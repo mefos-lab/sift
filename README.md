@@ -1,6 +1,6 @@
 # Sift
 
-[![Tests](https://img.shields.io/badge/tests-238%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)]()
 [![Data Sources](https://img.shields.io/badge/data%20sources-9-orange)]()
@@ -21,12 +21,21 @@ Because Sift runs as an MCP server inside Claude, the results are conversational
 ## Quick start
 
 ```bash
-# Clone and install
 git clone https://github.com/mefos-lab/sift.git
 cd sift
 python3 -m venv .venv && source .venv/bin/activate
+
+# onoma is a mefos-lab library and is not published to PyPI, so it has to
+# be installed from git before sift's own dependencies resolve.
+pip install "onoma @ git+https://github.com/mefos-lab/onoma"
 pip install -e .
 ```
+
+`sift` depends on [onoma](https://github.com/mefos-lab/onoma) for name
+normalization and matching. It is declared as an ordinary requirement rather
+than a git URL so that publishing it later needs no change here — but until
+that happens, `pip install -e .` on its own cannot find it, hence the extra
+line above.
 
 Add to `.mcp.json` in your project root:
 
@@ -274,7 +283,7 @@ sift/
 patterns/                — 18 YAML detection patterns with provenance
 visualizations/          — D3 HTML template
 .claude/skills/          — /investigate skill definition
-tests/                   — 238 tests (mocked HTTP, no API calls)
+tests/                   — test suite (mocked HTTP, no API calls)
 ```
 
 ### Error handling and rate limiting
@@ -289,12 +298,13 @@ All external API calls go through a centralized error handler (`sift/errors.py`)
 ## Development
 
 ```bash
-# Install
+# Install (see Quick start above for the onoma step)
 python3 -m venv .venv && source .venv/bin/activate
+pip install "onoma @ git+https://github.com/mefos-lab/onoma"
 pip install -e .
 pip install pytest pytest-asyncio
 
-# Run tests (238 tests, mocked HTTP — no API calls)
+# Run tests — all HTTP is mocked, so no API calls and no keys needed
 pytest tests/ -v
 
 # Run the server directly
